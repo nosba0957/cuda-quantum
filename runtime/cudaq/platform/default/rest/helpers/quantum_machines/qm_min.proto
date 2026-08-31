@@ -101,7 +101,7 @@ message OpenQuantumMachineRequest {
   // Really qm.grpc.qua_config.QuaConfig. A nested message and a bytes field are
   // encoded identically, so this ships the blob tools/quam2pb.py produced
   // without porting that schema. Do not turn this into a message type.
-  bytes config = 1;
+  optional bytes config = 1;
   CloseMode close_mode = 2;
 }
 
@@ -131,7 +131,7 @@ service QmmService {
 message QmServiceCompileRequest {
   string quantum_machine_id = 1;
   // Really qm.grpc.qua.QuaProgram; opaque blob, see OpenQuantumMachineRequest.
-  bytes high_level_program = 2;
+  optional bytes high_level_program = 2;
   optional bytes config = 3;
 }
 

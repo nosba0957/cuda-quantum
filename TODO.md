@@ -177,9 +177,49 @@ The spike hard-fails on `features & CURL_VERSION_HTTP2`, so a miss breaks loudly
   headers mismatch. Corpus `.qke` inputs are hand-written to route around it.
   Worth a separate look; does not block.
 
+### Found in P2 (verified by running, 2026-08-31)
+
+- **libcurl DOES deliver stream frames incrementally.** Proven, not inferred: with
+  the mock spacing 4 frames at fixed delays, the C++ write callback saw them at
+  exactly that cadence at 0.4s / 0.5s / 0.7s spacings. Buffering to completion would
+  cluster all four arrivals within a millisecond. **The last unproven transport
+  assumption in the design is now settled.**
+- **`scripts/bootstrap_prerequisites.sh` is a near-duplicate of
+  `install_prerequisites.sh` and also had `USE_NGHTTP2=OFF`.** A build going through
+  the bootstrap path would still have produced an HTTP/2-less curl. Both are fixed —
+  patch both on every rebase, not just the one.
+- curl + nghttp2 is **contained**: build nghttp2 1.64.0 static
+  (`ENABLE_LIB_ONLY=ON`, `BUILD_SHARED_LIBS=OFF`) into `$CURL_INSTALL_PREFIX`, then
+  pass curl `NGHTTP2_INCLUDE_DIR` / `NGHTTP2_LIBRARY` / `NGHTTP2_USE_STATIC_LIBS`.
+  One tarball, ~2 min. `CURL_ROOT` propagates into `CURLConfig.cmake`'s nested
+  `find_dependency(NGHTTP2)`, so no extra CMake wiring. **grpc++ fallback not needed.**
+  Local image `cuda-quantum-devcontainer:qm-http2` has it baked in.
+- **The C++ client's requests are byte-identical to a Python SDK-descriptor client's**
+  for the same inputs (71765 / 4357 / 39 / 60 / 27 bytes, same program digest).
+  Independent validation of `qm_min.proto`'s opaque-`bytes`-for-message substitution.
+
+**Two gaps that still matter:**
+
+- **Result element width is an ASSUMPTION.** The `data` bytes on `GetNamedResults`
+  are a raw numpy buffer with **no header**; `simple_dtype` and `shape` come from
+  `GetJobNamedResultHeader`, which is **not** among the six RPCs in `qm_min.proto`.
+  "Length-`creg.size` int buffer per shot" is right about content, but the width is
+  defaulted to 4-byte LE (QUA `int` is 32-bit) and exposed as a constructor arg.
+  **P3 decision: add `GetJobNamedResultHeader` as a seventh RPC, or accept the
+  assumption and confirm at P4 against real data.** This is the one thing in
+  `QuaResults` that could not be verified offline.
+- **Bitstring ordering is a trap.** LSB-first packing is right, but the reference
+  Python then formats via `bin(n).zfill(size)` — **MSB-first**, the Qiskit
+  convention. CUDA-Q's `sample_result` strings are **qubit-0-first**
+  (`QppCircuitSimulator.cpp:378`, ascending `measuredBits`). The C++ must not copy
+  the Python's string formatting. `QuaResults` emits clbit-0-first and asserts it.
+- `GetNamedResults` has a **chunk/summary envelope** not previously recorded:
+  `DataChunk` frames accumulate per output name, a terminating `DataSummary` carries
+  the count, and **chunk boundaries do not align to shot boundaries.**
+
 ### P1 verifier findings — act on these in P2/P3
 
-- **BUG in `qua_build.py:337`.** `"angle_values"` writes the full pre-transpile
+- **BUG in `qua_build.py:332`** (TODO previously said 337). **FIXED in P2.** `"angle_values"` writes the full pre-transpile
   list while `"angles"` (line 333) lists only surviving parameters. They diverge
   whenever transpile eliminates a rotation — demonstrated at `--optimization-level 2`:
   `input_stream_size: 1, angles: ["theta_0"], angle_values: [0.3, 0.7]`. C++ zipping
@@ -348,7 +388,7 @@ verifier reports, it does not fix; failures come back for re-dispatch.
 - **Gate:** each golden reloads via `QuaProgram.FromString`, and `qm.compile()`
   against the live QOP accepts it.
 
-### P2 — gRPC client (reworked: no instrument time available)
+### P2 — gRPC client — **PASSED** on parts 2 and 3; part 1 deferred
 - [ ] **Rebuild `/usr/local/curl` with nghttp2.** `USE_NGHTTP2=ON` is already
       flipped at `install_prerequisites.sh:539`, but the flag is inert unless
       nghttp2 is present at configure time. Confirm with a runtime probe that

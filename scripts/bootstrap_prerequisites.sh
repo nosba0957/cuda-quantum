@@ -61,6 +61,9 @@ PERL_TARBALL_URL="https://www.cpan.org/src/5.0/perl-${PERL_VERSION}.tar.gz"
 OPENSSL_VERSION=3.6.3
 OPENSSL_TARBALL_URL="https://www.openssl.org/source/openssl-${OPENSSL_VERSION}.tar.gz"
 
+NGHTTP2_VERSION=1.64.0
+NGHTTP2_TARBALL_URL="https://github.com/nghttp2/nghttp2/releases/download/v${NGHTTP2_VERSION}/nghttp2-${NGHTTP2_VERSION}.tar.gz"
+
 CURL_VERSION=8.21.0
 CURL_VERSION_UNDERSCORE=curl-8_21_0
 CURL_TARBALL_URL="https://github.com/curl/curl/releases/download/${CURL_VERSION_UNDERSCORE}/curl-${CURL_VERSION}.tar.gz"
@@ -175,6 +178,10 @@ if $lock_mode; then
   add_lock_line "cacert" \
     "type=pem" \
     "url=${CACERT_URL}"
+  add_lock_line "nghttp2" \
+    "type=tar" \
+    "url=${NGHTTP2_TARBALL_URL}" \
+    "version=${NGHTTP2_VERSION}"
   add_lock_line "curl" \
     "type=tar" \
     "url=${CURL_TARBALL_URL}" \
@@ -525,6 +532,28 @@ if [ -n "$CURL_INSTALL_PREFIX" ] && [ -z "$(echo $exclude_prereq | grep curl)" ]
     # This allows CMake's find_package(CURL) to use config mode, which correctly encodes
     # full paths to dependencies (OpenSSL, zlib) and avoids pkg-config issues where
     # -lssl/-lcrypto resolve to the wrong system libraries on macOS.
+
+    # USE_NGHTTP2=ON below is inert unless nghttp2 is present at configure time.
+    # Installed into CURL_INSTALL_PREFIX: curl is its only consumer, and the
+    # guard above keys on libcurl.a, so a prefix holding only nghttp2 still
+    # counts as "curl not installed".
+    if [ ! -f "$CURL_INSTALL_PREFIX/lib/libnghttp2.a" ]; then
+      wget "${NGHTTP2_TARBALL_URL}"
+      tar -xzf "nghttp2-${NGHTTP2_VERSION}.tar.gz" && cd "nghttp2-${NGHTTP2_VERSION}"
+      cmake -G Ninja -B build \
+        -DCMAKE_C_COMPILER="$CC" \
+        -DCMAKE_C_FLAGS="-fPIC" \
+        -DCMAKE_INSTALL_PREFIX="$CURL_INSTALL_PREFIX" \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DBUILD_STATIC_LIBS=ON \
+        -DENABLE_LIB_ONLY=ON \
+        -DENABLE_DOC=OFF
+      cmake --build build --config Release
+      cmake --install build --config Release
+      cd ..
+    fi
+
     wget "${CURL_TARBALL_URL}"
     tar -xzvf "curl-${CURL_VERSION}.tar.gz" && cd "curl-${CURL_VERSION}"
     cmake -G Ninja -B build \
@@ -545,7 +574,10 @@ if [ -n "$CURL_INSTALL_PREFIX" ] && [ -z "$(echo $exclude_prereq | grep curl)" ]
       -DUSE_LIBIDN2=OFF \
       -DCURL_BROTLI=OFF \
       -DCURL_ZSTD=OFF \
-      -DUSE_NGHTTP2=OFF \
+      -DUSE_NGHTTP2=ON \
+      -DNGHTTP2_USE_STATIC_LIBS=ON \
+      -DNGHTTP2_INCLUDE_DIR="$CURL_INSTALL_PREFIX/include" \
+      -DNGHTTP2_LIBRARY="$CURL_INSTALL_PREFIX/lib/libnghttp2.a" \
       -DENABLE_ARES=OFF \
       -DCURL_DISABLE_FTP=ON \
       -DCURL_DISABLE_TFTP=ON \
