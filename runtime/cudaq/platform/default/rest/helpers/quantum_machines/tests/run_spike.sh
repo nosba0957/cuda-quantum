@@ -15,5 +15,5 @@ mkdir -p /tmp/b
 protoc --cpp_out=/tmp/b qm_min.proto
 g++ -std=c++20 -O1 -I/tmp/b /tmp/b/qm_min.pb.cc tests/grpc_curl_spike.cpp \
     -o /tmp/b/spike -lprotobuf-lite -lcurl
-/tmp/b/spike '"$*"'
-'
+/tmp/b/spike "$@"
+' spike "$@"

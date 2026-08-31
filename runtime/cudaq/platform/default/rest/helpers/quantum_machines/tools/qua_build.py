@@ -329,7 +329,7 @@ def main(argv=None):
         "input_stream_type": "fixed",
         "input_stream_size": max(len(params), 1),
         "angles": [p.name for p in params],
-        "angle_values": angle_values,
+        "angle_values": [angle_values[int(p.name.split("_")[1])] for p in params],
         "shots": args.shots,
         "iterations": args.iterations,
         "result_streams": [{"name": c.name, "size": c.size} for c in qc.cregs],
