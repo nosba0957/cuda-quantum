@@ -1,0 +1,783 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/grpc/v2/job_api.proto
+
+syntax = "proto3";
+
+package qm.grpc.v2;
+
+import "google/protobuf/struct.proto";
+import "google/protobuf/wrappers.proto";
+import "qm/grpc/v2/qm_api.proto";
+import "qm/grpc/v2/common_types.proto";
+import "qm/pb/inc_qm_api.proto";
+import "qm/pb/job_manager.proto";
+import "qm/pb/job_results.proto";
+
+option java_package = "qm.client.api.v2";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message SetMatrixCorrectionResponse {
+  message SetMatrixCorrectionResponseError {
+    string details = 1;
+  }
+
+  message SetMatrixCorrectionResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetMatrixCorrectionResponse.SetMatrixCorrectionResponseSuccess success = 1;
+    qm.grpc.v2.SetMatrixCorrectionResponse.SetMatrixCorrectionResponseError error = 2;
+  }
+}
+
+message SetIntermediateFrequencyResponse {
+  message SetIntermediateFrequencyResponseError {
+    string details = 1;
+  }
+
+  message SetIntermediateFrequencyResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetIntermediateFrequencyResponse.SetIntermediateFrequencyResponseSuccess success = 1;
+    qm.grpc.v2.SetIntermediateFrequencyResponse.SetIntermediateFrequencyResponseError error = 2;
+  }
+}
+
+message SetDigitalDelayResponse {
+  message SetDigitalDelayResponseError {
+    string details = 1;
+  }
+
+  message SetDigitalDelayResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetDigitalDelayResponse.SetDigitalDelayResponseSuccess success = 1;
+    qm.grpc.v2.SetDigitalDelayResponse.SetDigitalDelayResponseError error = 2;
+  }
+}
+
+message SetDigitalBufferResponse {
+  message SetDigitalBufferResponseError {
+    string details = 1;
+  }
+
+  message SetDigitalBufferResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetDigitalBufferResponse.SetDigitalBufferResponseSuccess success = 1;
+    qm.grpc.v2.SetDigitalBufferResponse.SetDigitalBufferResponseError error = 2;
+  }
+}
+
+message SetInputDcOffsetResponse {
+  message SetInputDcOffsetResponseError {
+    string details = 1;
+  }
+
+  message SetInputDcOffsetResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetInputDcOffsetResponse.SetInputDcOffsetResponseSuccess success = 1;
+    qm.grpc.v2.SetInputDcOffsetResponse.SetInputDcOffsetResponseError error = 2;
+  }
+}
+
+message SetOutputDcOffsetResponse {
+  message SetOutputDcOffsetResponseError {
+    string details = 1;
+  }
+
+  message SetOutputDcOffsetResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetOutputDcOffsetResponse.SetOutputDcOffsetResponseSuccess success = 1;
+    qm.grpc.v2.SetOutputDcOffsetResponse.SetOutputDcOffsetResponseError error = 2;
+  }
+}
+
+message SetIoValuesResponse {
+  message SetIoValuesResponseError {
+    string details = 1;
+  }
+
+  message SetIoValuesResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetIoValuesResponse.SetIoValuesResponseSuccess success = 1;
+    qm.grpc.v2.SetIoValuesResponse.SetIoValuesResponseError error = 2;
+  }
+}
+
+message SetIoValuesRequest {
+  message IOValueSetData {
+    oneof oneof_IO_type {
+      int32 int_value = 2;
+      double double_value = 3;
+      bool boolean_value = 4;
+    }
+  }
+
+  string job_id = 1;
+  qm.grpc.v2.SetIoValuesRequest.IOValueSetData io1 = 2;
+  qm.grpc.v2.SetIoValuesRequest.IOValueSetData io2 = 3;
+}
+
+message GetIoValuesRequest {
+  string job_id = 1;
+}
+
+message IOValuesData {
+  uint32 int_value = 1;
+  double double_value = 2;
+  bool boolean_value = 3;
+}
+
+message GetIoValuesResponse {
+  message GetIoValuesResponseSuccess {
+    message IOValuesData {
+      uint32 int_value = 1;
+      double double_value = 2;
+      bool boolean_value = 3;
+    }
+
+    qm.grpc.v2.GetIoValuesResponse.GetIoValuesResponseSuccess.IOValuesData io1 = 1;
+    qm.grpc.v2.GetIoValuesResponse.GetIoValuesResponseSuccess.IOValuesData io2 = 2;
+  }
+
+  message GetIoValuesResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetIoValuesResponse.GetIoValuesResponseSuccess success = 1;
+    qm.grpc.v2.GetIoValuesResponse.GetIoValuesResponseError error = 2;
+  }
+}
+
+message JobServiceIsPausedRequest {
+  string job_id = 1;
+}
+
+message IsPausedResponse {
+  message IsPausedResponseError {
+    string details = 1;
+  }
+
+  message IsPausedResponseSuccess {
+    bool is_paused = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.IsPausedResponse.IsPausedResponseError error = 1;
+    qm.grpc.v2.IsPausedResponse.IsPausedResponseSuccess success = 2;
+  }
+}
+
+message JobServiceGetConfigRequest {
+  string job_id = 1;
+}
+
+message JobServiceGetJobStatusRequest {
+  string job_id = 1;
+}
+
+message ResumeRequest {
+  string job_id = 1;
+}
+
+message ResumeResponse {
+  message ResumeResponseError {
+    string details = 1;
+  }
+
+  message ResumeResponseSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.ResumeResponse.ResumeResponseSuccess success = 1;
+    qm.grpc.v2.ResumeResponse.ResumeResponseError error = 2;
+  }
+}
+
+message SetMatrixCorrectionRequest {
+  string job_id = 1;
+  string qe = 2;
+  qm.grpc.qm_api.Matrix correction = 3;
+}
+
+message SetIntermediateFrequencyRequest {
+  string job_id = 1;
+  string qe = 2;
+  double frequency = 3;
+}
+
+message SetDigitalDelayRequest {
+  string job_id = 1;
+  string qe = 2;
+  string port = 3;
+  uint32 delay = 4;
+}
+
+message SetDigitalBufferRequest {
+  string job_id = 1;
+  string qe = 2;
+  string port = 3;
+  uint32 buffer = 4;
+}
+
+message SetInputDcOffsetRequest {
+  string job_id = 1;
+  string qe = 2;
+  string port = 3;
+  double offset = 4;
+}
+
+message SetOutputDcOffsetRequest {
+  string job_id = 1;
+  string qe = 2;
+  oneof oneof_element_input_type {
+    qm.grpc.v2.MixInputsDcOffset mix_inputs = 3;
+    qm.grpc.v2.SingleInputDcOffset single_input = 4;
+  }
+}
+
+message GetMatrixCorrectionRequest {
+  string job_id = 1;
+  string qe = 2;
+}
+
+message GetMatrixCorrectionError {
+  string details = 1;
+}
+
+message GetMatrixCorrectionResponse {
+  message GetMatrixCorrectionResponseSuccess {
+    qm.grpc.qm_api.Matrix correction = 1;
+  }
+
+  message GetMatrixCorrectionResponseError {
+    qm.grpc.v2.GetMatrixCorrectionError error = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetMatrixCorrectionResponse.GetMatrixCorrectionResponseError error = 1;
+    qm.grpc.v2.GetMatrixCorrectionResponse.GetMatrixCorrectionResponseSuccess success = 2;
+  }
+}
+
+message GetIntermediateFrequencyRequest {
+  string job_id = 1;
+  string qe = 2;
+}
+
+message GetIntermediateFrequencyResponse {
+  message GetIntermediateFrequencyResponseError {
+    string details = 1;
+  }
+
+  message GetIntermediateFrequencyResponseSuccess {
+    double frequency = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetIntermediateFrequencyResponse.GetIntermediateFrequencyResponseError error = 1;
+    qm.grpc.v2.GetIntermediateFrequencyResponse.GetIntermediateFrequencyResponseSuccess success = 2;
+  }
+}
+
+message GetDigitalDelayRequest {
+  string job_id = 1;
+  string qe = 2;
+  string port = 3;
+}
+
+message GetDigitalDelayResponse {
+  message GetDigitalDelayResponseError {
+    string details = 1;
+  }
+
+  message GetDigitalDelayResponseSuccess {
+    uint32 delay = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetDigitalDelayResponse.GetDigitalDelayResponseSuccess success = 1;
+    qm.grpc.v2.GetDigitalDelayResponse.GetDigitalDelayResponseError error = 2;
+  }
+}
+
+message GetDigitalBufferRequest {
+  string job_id = 1;
+  string qe = 2;
+  string port = 3;
+}
+
+message GetDigitalBufferResponse {
+  message GetDigitalBufferResponseError {
+    string details = 1;
+  }
+
+  message GetDigitalBufferResponseSuccess {
+    uint32 buffer = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetDigitalBufferResponse.GetDigitalBufferResponseSuccess success = 1;
+    qm.grpc.v2.GetDigitalBufferResponse.GetDigitalBufferResponseError error = 2;
+  }
+}
+
+message GetInputDcOffsetRequest {
+  string job_id = 1;
+  string qe = 2;
+  string port = 3;
+}
+
+message GetInputDcOffsetError {
+  string details = 1;
+}
+
+message GetInputDcOffsetSuccess {
+  double offset = 1;
+}
+
+message GetInputDcOffsetResponse {
+  message GetInputDcOffsetResponseError {
+    string details = 1;
+  }
+
+  message GetInputDcOffsetResponseSuccess {
+    double offset = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetInputDcOffsetResponse.GetInputDcOffsetResponseSuccess success = 1;
+    qm.grpc.v2.GetInputDcOffsetResponse.GetInputDcOffsetResponseError error = 2;
+  }
+}
+
+message GetOutputDcOffsetRequest {
+  string job_id = 1;
+  string qe = 2;
+}
+
+message GetOutputDcOffsetResponse {
+  message GetOutputDcOffsetResponseError {
+    string details = 1;
+  }
+
+  message GetOutputDcOffsetResponseSuccess {
+    oneof oneof_element_input_type {
+      qm.grpc.v2.MixInputsDcOffset mix_inputs = 2;
+      qm.grpc.v2.SingleInputDcOffset single_input = 3;
+    }
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetOutputDcOffsetResponse.GetOutputDcOffsetResponseSuccess success = 1;
+    qm.grpc.v2.GetOutputDcOffsetResponse.GetOutputDcOffsetResponseError error = 2;
+  }
+}
+
+message MixInputsDcOffset {
+  optional double I = 1;
+  optional double Q = 2;
+}
+
+message SingleInputDcOffset {
+  double offset = 1;
+}
+
+message JobServiceGetConfigResponse {
+  oneof response_oneof {
+    qm.grpc.v2.GetConfigSuccess success = 1;
+    qm.grpc.v2.GetConfigError error = 2;
+  }
+}
+
+message JobServiceGetJobStatusResponse {
+  message JobServiceGetJobStatusResponseError {
+    string details = 1;
+  }
+
+  message JobServiceGetJobStatusResponseSuccess {
+    qm.grpc.v2.JobExecutionStatus status = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.JobServiceGetJobStatusResponse.JobServiceGetJobStatusResponseSuccess success = 1;
+    qm.grpc.v2.JobServiceGetJobStatusResponse.JobServiceGetJobStatusResponseError error = 2;
+  }
+}
+
+message JobServicePushToInputStreamRequest {
+  string job_id = 1;
+  string stream_name = 2;
+  oneof stream_data_oneof {
+    qm.grpc.job_manager.IntStreamData int_stream_data = 3;
+    qm.grpc.job_manager.FixedStreamData fixed_stream_data = 4;
+    qm.grpc.job_manager.BoolStreamData bool_stream_data = 5;
+  }
+}
+
+message PushToInputStreamResponse {
+  message PushToInputStreamResponseSuccess {
+  }
+
+  message PushToInputStreamResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.PushToInputStreamResponse.PushToInputStreamResponseSuccess success = 1;
+    qm.grpc.v2.PushToInputStreamResponse.PushToInputStreamResponseError error = 2;
+  }
+}
+
+message GetJobResultSchemaRequest {
+  string job_id = 1;
+}
+
+message GetJobResultSchemaResponse {
+  message GetJobResultSchemaResponseSuccess {
+    message Item {
+      string name = 1;
+      string simple_dtype = 2;
+      bool is_single = 3;
+      int32 expected_count = 4;
+      repeated int32 shape = 5;
+    }
+
+    repeated qm.grpc.v2.GetJobResultSchemaResponse.GetJobResultSchemaResponseSuccess.Item items = 1;
+  }
+
+  message GetJobResultSchemaResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetJobResultSchemaResponse.GetJobResultSchemaResponseSuccess success = 1;
+    qm.grpc.v2.GetJobResultSchemaResponse.GetJobResultSchemaResponseError error = 2;
+  }
+}
+
+message GetJobNamedResultHeaderRequest {
+  string job_id = 1;
+  string output_name = 2;
+  bool flat_format = 3;
+}
+
+message GetJobNamedResultsHeadersRequest {
+  message Output {
+    string output_name = 1;
+    bool flat_format = 2;
+  }
+
+  string job_id = 1;
+  repeated qm.grpc.v2.GetJobNamedResultsHeadersRequest.Output outputs = 2;
+}
+
+message GetJobNamedResultsHeadersResponse {
+  message GetJobNamedResultsHeadersResponseSuccess {
+    message OutputHeader {
+      int32 count_so_far = 1;
+      bool has_data_loss = 2;
+      string output_name = 3;
+      string simple_dtype = 4;
+      repeated int32 shape = 5;
+    }
+
+    repeated qm.grpc.v2.GetJobNamedResultsHeadersResponse.GetJobNamedResultsHeadersResponseSuccess.OutputHeader headers = 1;
+  }
+
+  message GetJobNamedResultsHeadersResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetJobNamedResultsHeadersResponse.GetJobNamedResultsHeadersResponseSuccess success = 1;
+    qm.grpc.v2.GetJobNamedResultsHeadersResponse.GetJobNamedResultsHeadersResponseError error = 2;
+  }
+}
+
+message GetJobNamedResultHeaderResponse {
+  message GetJobNamedResultHeaderResponseError {
+    string details = 1;
+  }
+
+  message GetJobNamedResultHeaderResponseSuccess {
+    bool is_single = 1;
+    int32 count_so_far = 2;
+    string simple_dtype = 3;
+    bool has_data_loss = 4;
+    repeated int32 shape = 5;
+    string output_name = 6;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetJobNamedResultHeaderResponse.GetJobNamedResultHeaderResponseSuccess success = 1;
+    qm.grpc.v2.GetJobNamedResultHeaderResponse.GetJobNamedResultHeaderResponseError error = 2;
+  }
+}
+
+message GetNamedResultsRequest {
+  message Output {
+    string output_name = 1;
+    qm.grpc.v2.Range range = 2;
+  }
+
+  string job_id = 1;
+  repeated qm.grpc.v2.GetNamedResultsRequest.Output outputs = 2;
+}
+
+message GetNamedResultRequest {
+  string job_id = 1;
+  string output_name = 2;
+  int32 limit = 3;
+  google.protobuf.Int64Value long_offset = 5;
+}
+
+message GetNamedResultResponse {
+  message GetNamedResultResponseError {
+    string details = 1;
+  }
+
+  message GetNamedResultResponseSuccess {
+    message DataChunk {
+      bytes data = 1;
+    }
+
+    message DataSummary {
+      int32 count = 1;
+    }
+
+    int32 count_of_items = 1;
+    bytes data = 2;
+    string output_name = 5;
+    oneof data_oneof {
+      qm.grpc.v2.GetNamedResultResponse.GetNamedResultResponseSuccess.DataChunk data_chunk = 3;
+      qm.grpc.v2.GetNamedResultResponse.GetNamedResultResponseSuccess.DataSummary data_summary = 4;
+    }
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetNamedResultResponse.GetNamedResultResponseSuccess success = 1;
+    qm.grpc.v2.GetNamedResultResponse.GetNamedResultResponseError error = 2;
+  }
+}
+
+message GetJobErrorsRequest {
+  string job_id = 1;
+}
+
+message GetJobErrorsResponse {
+  message GetJobErrorsResponseError {
+    string details = 1;
+  }
+
+  message GetJobErrorsResponseSuccess {
+    message Error {
+      int32 errorCode = 1;
+      qm.grpc.v2.GetJobErrorsResponse.GetJobErrorsResponseSuccess.ExecutionErrorSeverity errorSeverity = 2;
+      string message = 3;
+    }
+
+    enum ExecutionErrorSeverity {
+      ERROR = 0;
+      WARNING = 1;
+    }
+
+    repeated qm.grpc.v2.GetJobErrorsResponse.GetJobErrorsResponseSuccess.Error errors = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetJobErrorsResponse.GetJobErrorsResponseSuccess success = 1;
+    qm.grpc.v2.GetJobErrorsResponse.GetJobErrorsResponseError error = 2;
+  }
+}
+
+message CancelRequest {
+  string job_id = 1;
+}
+
+message CancelResponse {
+  message CancelJobError {
+    string details = 1;
+  }
+
+  message CancelJobSuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.CancelResponse.CancelJobSuccess success = 1;
+    qm.grpc.v2.CancelResponse.CancelJobError error = 2;
+  }
+}
+
+message GetJobResultStateRequest {
+  string job_id = 1;
+}
+
+message GetJobResultStateResponse {
+  message GetJobResultStateResponseError {
+    string details = 1;
+  }
+
+  message GetJobResultStateResponseSuccess {
+    bool done = 1;
+    bool closed = 2;
+    bool has_dataloss = 3;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetJobResultStateResponse.GetJobResultStateResponseSuccess success = 1;
+    qm.grpc.v2.GetJobResultStateResponse.GetJobResultStateResponseError error = 2;
+  }
+}
+
+message PullSamplesRequest {
+  string job_id = 1;
+  bool include_analog = 2;
+  bool include_digital = 3;
+}
+
+message PullSamplesResponse {
+  message PullSamplesResponseError {
+    string details = 1;
+  }
+
+  message PullSamplesResponseSuccess {
+    message doubleData {
+      oneof output {
+        qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess.mw mw = 1;
+        qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess.lf lf = 2;
+      }
+    }
+
+    message mw {
+      int32 ducId = 1;
+      repeated double I = 2;
+      repeated double Q = 3;
+    }
+
+    message lf {
+      repeated double items = 1;
+    }
+
+    message booleanData {
+      message Data {
+        repeated bool item = 1;
+      }
+
+      repeated qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess.booleanData.Data data = 1;
+    }
+
+    enum Mode {
+      ANALOG = 0;
+      DIGITAL = 1;
+    }
+
+    string controller = 1;
+    int32 fem_id = 2;
+    int32 port_id = 3;
+    qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess.Mode mode = 4;
+    oneof data {
+      qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess.doubleData double_data = 5;
+      qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess.booleanData boolean_data = 6;
+    }
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.PullSamplesResponse.PullSamplesResponseSuccess success = 1;
+    qm.grpc.v2.PullSamplesResponse.PullSamplesResponseError error = 2;
+  }
+}
+
+message SetOscillatorFrequencyRequest {
+  enum UpdateComponentSelection {
+    both = 0;
+    upconverter = 1;
+    downconverter = 2;
+  }
+
+  string job_id = 1;
+  string qe = 2;
+  double new_frequency_hz = 3;
+  qm.grpc.v2.SetOscillatorFrequencyRequest.UpdateComponentSelection update_component = 4;
+}
+
+message SetOscillatorFrequencyResponse {
+  message ChangeOscillatorFrequencyError {
+    string details = 1;
+  }
+
+  message ChangeOscillatorFrequencySuccess {
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.SetOscillatorFrequencyResponse.ChangeOscillatorFrequencySuccess success = 1;
+    qm.grpc.v2.SetOscillatorFrequencyResponse.ChangeOscillatorFrequencyError error = 2;
+  }
+}
+
+message GetWaveformReportRequest {
+  string job_id = 1;
+}
+
+message GetWaveformReportResponse {
+  message GetWaveformReportSuccess {
+    google.protobuf.Struct waveformReport = 1;
+  }
+
+  message GetWaveformReportError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetWaveformReportResponse.GetWaveformReportSuccess success = 1;
+    qm.grpc.v2.GetWaveformReportResponse.GetWaveformReportError error = 2;
+  }
+}
+
+service JobService {
+  rpc GetConfig (qm.grpc.v2.JobServiceGetConfigRequest) returns (qm.grpc.v2.JobServiceGetConfigResponse);
+  rpc GetJobStatus (qm.grpc.v2.JobServiceGetJobStatusRequest) returns (qm.grpc.v2.JobServiceGetJobStatusResponse);
+  rpc GetJobStatusUpdates (qm.grpc.v2.JobServiceGetJobStatusRequest) returns (stream qm.grpc.v2.JobServiceGetJobStatusResponse);
+  rpc PushToInputStream (qm.grpc.v2.JobServicePushToInputStreamRequest) returns (qm.grpc.v2.PushToInputStreamResponse);
+  rpc IsPaused (qm.grpc.v2.JobServiceIsPausedRequest) returns (qm.grpc.v2.IsPausedResponse);
+  rpc Resume (qm.grpc.v2.ResumeRequest) returns (qm.grpc.v2.ResumeResponse);
+  rpc SetMatrixCorrection (qm.grpc.v2.SetMatrixCorrectionRequest) returns (qm.grpc.v2.SetMatrixCorrectionResponse);
+  rpc GetMatrixCorrection (qm.grpc.v2.GetMatrixCorrectionRequest) returns (qm.grpc.v2.GetMatrixCorrectionResponse);
+  rpc SetIntermediateFrequency (qm.grpc.v2.SetIntermediateFrequencyRequest) returns (qm.grpc.v2.SetIntermediateFrequencyResponse);
+  rpc GetIntermediateFrequency (qm.grpc.v2.GetIntermediateFrequencyRequest) returns (qm.grpc.v2.GetIntermediateFrequencyResponse);
+  rpc SetDigitalDelay (qm.grpc.v2.SetDigitalDelayRequest) returns (qm.grpc.v2.SetDigitalDelayResponse);
+  rpc GetDigitalDelay (qm.grpc.v2.GetDigitalDelayRequest) returns (qm.grpc.v2.GetDigitalDelayResponse);
+  rpc SetDigitalBuffer (qm.grpc.v2.SetDigitalBufferRequest) returns (qm.grpc.v2.SetDigitalBufferResponse);
+  rpc GetDigitalBuffer (qm.grpc.v2.GetDigitalBufferRequest) returns (qm.grpc.v2.GetDigitalBufferResponse);
+  rpc SetInputDcOffset (qm.grpc.v2.SetInputDcOffsetRequest) returns (qm.grpc.v2.SetInputDcOffsetResponse);
+  rpc GetInputDcOffset (qm.grpc.v2.GetInputDcOffsetRequest) returns (qm.grpc.v2.GetInputDcOffsetResponse);
+  rpc SetOutputDcOffset (qm.grpc.v2.SetOutputDcOffsetRequest) returns (qm.grpc.v2.SetOutputDcOffsetResponse);
+  rpc GetOutputDcOffset (qm.grpc.v2.GetOutputDcOffsetRequest) returns (qm.grpc.v2.GetOutputDcOffsetResponse);
+  rpc SetOscillatorFrequency (qm.grpc.v2.SetOscillatorFrequencyRequest) returns (qm.grpc.v2.SetOscillatorFrequencyResponse);
+  rpc SetIOValues (qm.grpc.v2.SetIoValuesRequest) returns (qm.grpc.v2.SetIoValuesResponse);
+  rpc GetIOValues (qm.grpc.v2.GetIoValuesRequest) returns (qm.grpc.v2.GetIoValuesResponse);
+  rpc GetJobResultSchema (qm.grpc.v2.GetJobResultSchemaRequest) returns (qm.grpc.v2.GetJobResultSchemaResponse);
+  rpc GetJobNamedResultHeader (qm.grpc.v2.GetJobNamedResultHeaderRequest) returns (qm.grpc.v2.GetJobNamedResultHeaderResponse);
+  rpc GetJobNamedResultsHeaders (qm.grpc.v2.GetJobNamedResultsHeadersRequest) returns (qm.grpc.v2.GetJobNamedResultsHeadersResponse);
+  rpc GetNamedResult (qm.grpc.v2.GetNamedResultRequest) returns (stream qm.grpc.v2.GetNamedResultResponse);
+  rpc GetNamedResults (qm.grpc.v2.GetNamedResultsRequest) returns (stream qm.grpc.v2.GetNamedResultResponse);
+  rpc GetErrors (qm.grpc.v2.GetJobErrorsRequest) returns (qm.grpc.v2.GetJobErrorsResponse);
+  rpc GetJobResultState (qm.grpc.v2.GetJobResultStateRequest) returns (qm.grpc.v2.GetJobResultStateResponse);
+  rpc PullSamples (qm.grpc.v2.PullSamplesRequest) returns (stream qm.grpc.v2.PullSamplesResponse);
+  rpc Cancel (qm.grpc.v2.CancelRequest) returns (qm.grpc.v2.CancelResponse);
+  rpc GetWaveformReport (qm.grpc.v2.GetWaveformReportRequest) returns (qm.grpc.v2.GetWaveformReportResponse);
+}
+

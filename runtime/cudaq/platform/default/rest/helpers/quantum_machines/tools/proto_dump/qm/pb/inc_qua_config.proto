@@ -1,0 +1,578 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/inc_qua_config.proto
+
+syntax = "proto3";
+
+package qm.grpc.qua_config;
+
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
+
+option java_multiple_files = true;
+
+message QuaConfig {
+  message QuaConfigV1 {
+    map<string, qm.grpc.qua_config.QuaConfig.ControllerDec> controllers = 2;
+    map<string, qm.grpc.qua_config.QuaConfig.DeviceDec> controlDevices = 20;
+    map<string, qm.grpc.qua_config.QuaConfig.Oscillator> oscillators = 9;
+    map<string, qm.grpc.qua_config.QuaConfig.ElementDec> elements = 3;
+    map<string, qm.grpc.qua_config.QuaConfig.PulseDec> pulses = 4;
+    map<string, qm.grpc.qua_config.QuaConfig.MixerDec> mixers = 5;
+    map<string, qm.grpc.qua_config.QuaConfig.WaveformDec> waveforms = 6;
+    map<string, qm.grpc.qua_config.QuaConfig.DigitalWaveformDec> digitalWaveforms = 7;
+    map<string, qm.grpc.qua_config.QuaConfig.IntegrationWeightDec> integrationWeights = 8;
+    map<string, qm.grpc.qua_config.QuaConfig.Octave.Config> octaves = 11;
+  }
+
+  message QuaConfigV2 {
+    qm.grpc.qua_config.QuaConfig.ControllerConfig controller_config = 1;
+    qm.grpc.qua_config.QuaConfig.LogicalConfig logical_config = 2;
+  }
+
+  message ControllerConfig {
+    map<string, qm.grpc.qua_config.QuaConfig.DeviceDec> controlDevices = 1;
+    map<string, qm.grpc.qua_config.QuaConfig.MixerDec> mixers = 2;
+    map<string, qm.grpc.qua_config.QuaConfig.Octave.Config> octaves = 3;
+  }
+
+  message LogicalConfig {
+    map<string, qm.grpc.qua_config.QuaConfig.ElementDec> elements = 1;
+    map<string, qm.grpc.qua_config.QuaConfig.Oscillator> oscillators = 2;
+    map<string, qm.grpc.qua_config.QuaConfig.PulseDec> pulses = 3;
+    map<string, qm.grpc.qua_config.QuaConfig.WaveformDec> waveforms = 4;
+    map<string, qm.grpc.qua_config.QuaConfig.DigitalWaveformDec> digitalWaveforms = 5;
+    map<string, qm.grpc.qua_config.QuaConfig.IntegrationWeightDec> integrationWeights = 6;
+  }
+
+  message DeviceDec {
+    map<uint32, qm.grpc.qua_config.QuaConfig.FEMTypes> fems = 1;
+  }
+
+  message FEMTypes {
+    oneof fem_type_one_of {
+      qm.grpc.qua_config.QuaConfig.ControllerDec opx = 1;
+      qm.grpc.qua_config.QuaConfig.OctoDacFemDec octo_dac = 2;
+      qm.grpc.qua_config.QuaConfig.MicrowaveFemDec microwave = 3;
+    }
+  }
+
+  message ControllerDec {
+    string type = 1;
+    map<uint32, qm.grpc.qua_config.QuaConfig.AnalogOutputPortDec> analogOutputs = 2;
+    map<uint32, qm.grpc.qua_config.QuaConfig.AnalogInputPortDec> analogInputs = 3;
+    map<uint32, qm.grpc.qua_config.QuaConfig.DigitalOutputPortDec> digitalOutputs = 4;
+    map<uint32, qm.grpc.qua_config.QuaConfig.DigitalInputPortDec> digitalInputs = 5;
+  }
+
+  message OctoDacFemDec {
+    map<uint32, qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec> analogOutputs = 2;
+    map<uint32, qm.grpc.qua_config.QuaConfig.AnalogInputPortDec> analogInputs = 3;
+    map<uint32, qm.grpc.qua_config.QuaConfig.DigitalOutputPortDec> digitalOutputs = 4;
+    map<uint32, qm.grpc.qua_config.QuaConfig.DigitalInputPortDec> digitalInputs = 5;
+  }
+
+  message MicrowaveFemDec {
+    map<uint32, qm.grpc.qua_config.QuaConfig.MicrowaveAnalogOutputPortDec> analogOutputs = 2;
+    map<uint32, qm.grpc.qua_config.QuaConfig.MicrowaveAnalogInputPortDec> analogInputs = 3;
+    map<uint32, qm.grpc.qua_config.QuaConfig.DigitalOutputPortDec> digitalOutputs = 4;
+    map<uint32, qm.grpc.qua_config.QuaConfig.DigitalInputPortDec> digitalInputs = 5;
+  }
+
+  message AnalogOutputPortDec {
+    optional double offset = 1;
+    qm.grpc.qua_config.QuaConfig.AnalogOutputPortFilter filter = 2;
+    optional uint32 delay = 3;
+    map<uint32, double> channelWeights = 4;
+    optional bool shareable = 5;
+    map<uint32, double> crosstalk = 6;
+    optional double min_voltage_limit = 7;
+    optional double max_voltage_limit = 8;
+  }
+
+  message MicrowaveAnalogOutputPortDec {
+    message UpConvertersContainer {
+      map<uint32, qm.grpc.qua_config.QuaConfig.UpConverterConfigDec> value = 1;
+    }
+
+    optional double samplingRate = 1;
+    optional int32 fullScalePowerDbm = 2;
+    optional int32 band = 3;
+    optional uint32 delay = 4;
+    optional bool shareable = 5;
+    map<uint32, qm.grpc.qua_config.QuaConfig.UpConverterConfigDec> upconverters = 6;
+    qm.grpc.qua_config.QuaConfig.MicrowaveAnalogOutputPortDec.UpConvertersContainer upconverters_v2 = 7;
+  }
+
+  message UpConverterConfigDec {
+    double frequency = 1;
+  }
+
+  message MicrowaveAnalogInputPortDec {
+    enum LoMode {
+      AUTO = 0;
+      ALWAYS_ON = 1;
+    }
+
+    optional double samplingRate = 1;
+    optional int32 gain_db = 2;
+    optional bool shareable = 3;
+    optional int32 band = 4;
+    qm.grpc.qua_config.QuaConfig.DownConverterConfigDec downconverter = 5;
+    optional qm.grpc.qua_config.QuaConfig.MicrowaveAnalogInputPortDec.LoMode lo_mode = 6;
+  }
+
+  message DownConverterConfigDec {
+    double frequency = 1;
+  }
+
+  message OctoDacAnalogOutputPortDec {
+    message CrosstalkContainer {
+      map<uint32, double> value = 1;
+    }
+
+    message VoltageLimitContainer {
+      optional double value = 1;
+    }
+
+    enum OutputMode {
+      direct = 0;
+      amplified = 1;
+    }
+
+    enum SamplingRate {
+      Undefined = 0;
+      GSPS1 = 1;
+      GSPS2 = 2;
+    }
+
+    enum SamplingRateMode {
+      unset = 0;
+      mw = 1;
+      pulse = 2;
+    }
+
+    optional double offset = 1;
+    qm.grpc.qua_config.QuaConfig.AnalogOutputPortFilter filter = 2;
+    optional uint32 delay = 3;
+    optional bool shareable = 5;
+    map<uint32, double> crosstalk = 6;
+    optional qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec.SamplingRate sampling_rate = 7;
+    optional qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec.SamplingRateMode upsampling_mode = 8;
+    optional qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec.OutputMode output_mode = 9;
+    qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec.CrosstalkContainer crosstalk_v2 = 10;
+    optional qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec.VoltageLimitContainer min_voltage_limit = 11;
+    optional qm.grpc.qua_config.QuaConfig.OctoDacAnalogOutputPortDec.VoltageLimitContainer max_voltage_limit = 12;
+  }
+
+  message ExponentialParameters {
+    double amplitude = 1;
+    double time_constant = 2;
+  }
+
+  message IirFilter {
+    message ExponentialParametersContainer {
+      repeated qm.grpc.qua_config.QuaConfig.ExponentialParameters value = 1;
+    }
+
+    message HighPassContainer {
+      optional double value = 1;
+    }
+
+    message ExponentialDcGainContainer {
+      optional double value = 1;
+    }
+
+    repeated qm.grpc.qua_config.QuaConfig.ExponentialParameters exponential = 1;
+    optional double high_pass = 2;
+    qm.grpc.qua_config.QuaConfig.IirFilter.ExponentialParametersContainer exponential_v2 = 3;
+    optional qm.grpc.qua_config.QuaConfig.IirFilter.HighPassContainer high_pass_v2 = 4;
+    optional qm.grpc.qua_config.QuaConfig.IirFilter.ExponentialDcGainContainer exponential_dc_gain = 5;
+  }
+
+  message AnalogOutputPortFilter {
+    message FeedforwardContainer {
+      repeated double value = 1;
+    }
+
+    repeated double feedforward = 1;
+    repeated double feedback = 2;
+    qm.grpc.qua_config.QuaConfig.IirFilter iir = 3;
+    qm.grpc.qua_config.QuaConfig.AnalogOutputPortFilter.FeedforwardContainer feedforward_v2 = 4;
+  }
+
+  message AnalogInputPortDec {
+    optional double offset = 1;
+    optional google.protobuf.Int32Value gainDb = 2;
+    optional bool shareable = 3;
+    optional double samplingRate = 4;
+  }
+
+  message DigitalOutputPortDec {
+    optional bool shareable = 1;
+    optional bool inverted = 2;
+    optional qm.grpc.qua_config.QuaConfig.VoltageLevel level = 3;
+  }
+
+  message DigitalInputPortDec {
+    enum Polarity {
+      RISING = 0;
+      FALLING = 1;
+    }
+
+    optional uint32 deadtime = 1;
+    optional qm.grpc.qua_config.QuaConfig.DigitalInputPortDec.Polarity polarity = 2;
+    optional double threshold = 3;
+    optional bool shareable = 4;
+    optional qm.grpc.qua_config.QuaConfig.VoltageLevel level = 5;
+  }
+
+  message MixerRef {
+    string mixer = 1;
+    uint64 loFrequency = 2;
+    double loFrequencyDouble = 3;
+  }
+
+  message Oscillator {
+    google.protobuf.Int64Value intermediateFrequency = 1;
+    qm.grpc.qua_config.QuaConfig.MixerRef mixer = 2;
+    double intermediateFrequencyDouble = 3;
+  }
+
+  message SingleInput {
+    qm.grpc.qua_config.QuaConfig.DacPortReference port = 1;
+  }
+
+  message MixInputs {
+    qm.grpc.qua_config.QuaConfig.DacPortReference I = 1;
+    qm.grpc.qua_config.QuaConfig.DacPortReference Q = 2;
+    string mixer = 3;
+    uint64 loFrequency = 4;
+    double loFrequencyDouble = 5;
+  }
+
+  message SingleInputCollection {
+    map<string, qm.grpc.qua_config.QuaConfig.DacPortReference> inputs = 1;
+  }
+
+  message MultipleInputs {
+    map<string, qm.grpc.qua_config.QuaConfig.DacPortReference> inputs = 1;
+  }
+
+  message GeneralPortReference {
+    string device_name = 1;
+    uint32 port = 2;
+  }
+
+  message MultipleOutputs {
+    map<string, qm.grpc.qua_config.QuaConfig.AdcPortReference> port_references = 1;
+  }
+
+  message ElementDec {
+    map<string, qm.grpc.qua_config.QuaConfig.AdcPortReference> outputs = 3;
+    map<string, qm.grpc.qua_config.QuaConfig.DigitalInputPortReference> digitalInputs = 4;
+    map<string, qm.grpc.qua_config.QuaConfig.DigitalOutputPortReference> digitalOutputs = 9;
+    map<string, qm.grpc.qua_config.QuaConfig.GeneralPortReference> RFInputs = 10;
+    map<string, qm.grpc.qua_config.QuaConfig.GeneralPortReference> RFOutputs = 11;
+    google.protobuf.UInt32Value timeOfFlight = 7;
+    google.protobuf.UInt32Value smearing = 8;
+    google.protobuf.UInt64Value intermediateFrequency = 20;
+    double intermediateFrequencyDouble = 24;
+    bool intermediateFrequencyNegative = 23;
+    map<string, string> operations = 21;
+    google.protobuf.StringValue measurementQe = 22;
+    qm.grpc.qua_config.QuaConfig.OutputPulseParameters outputPulseParameters = 30;
+    qm.grpc.qua_config.QuaConfig.HoldOffset holdOffset = 31;
+    qm.grpc.qua_config.QuaConfig.Sticky sticky = 32;
+    qm.grpc.qua_config.QuaConfig.ElementThread thread = 40;
+    oneof element_inputs_one_of {
+      qm.grpc.qua_config.QuaConfig.SingleInput singleInput = 5;
+      qm.grpc.qua_config.QuaConfig.MixInputs mixInputs = 6;
+      qm.grpc.qua_config.QuaConfig.SingleInputCollection singleInputCollection = 50;
+      qm.grpc.qua_config.QuaConfig.MultipleInputs multipleInputs = 51;
+      qm.grpc.qua_config.QuaConfig.MicrowaveInputPortReference microwaveInput = 52;
+    }
+    oneof element_outputs_one_of {
+      qm.grpc.qua_config.QuaConfig.MicrowaveOutputPortReference microwaveOutput = 53;
+      qm.grpc.qua_config.QuaConfig.MultipleOutputs multipleOutputs = 54;
+    }
+    oneof oscillator_one_of {
+      google.protobuf.Int64Value intermediateFrequencyOscillator = 61;
+      double intermediateFrequencyOscillatorDouble = 64;
+      google.protobuf.StringValue namedOscillator = 62;
+      google.protobuf.Empty noOscillator = 63;
+    }
+  }
+
+  message ElementThread {
+    string threadName = 1;
+  }
+
+  message OutputPulseParameters {
+    enum Polarity {
+      ASCENDING = 0;
+      DESCENDING = 1;
+    }
+
+    uint32 threshold = 1;
+    repeated uint32 table = 2;
+    int32 signalThreshold = 3;
+    qm.grpc.qua_config.QuaConfig.OutputPulseParameters.Polarity signalPolarity = 4;
+    int32 derivativeThreshold = 5;
+    qm.grpc.qua_config.QuaConfig.OutputPulseParameters.Polarity derivativePolarity = 6;
+  }
+
+  message HoldOffset {
+    int32 duration = 1;
+  }
+
+  message Sticky {
+    bool analog = 1;
+    bool digital = 2;
+    int32 duration = 3;
+  }
+
+  message DacPortReference {
+    string controller = 1;
+    uint32 number = 2;
+    uint32 fem = 3;
+  }
+
+  message AdcPortReference {
+    string controller = 1;
+    uint32 number = 2;
+    uint32 fem = 3;
+  }
+
+  message DigitalInputPortReference {
+    qm.grpc.qua_config.QuaConfig.PortReference port = 1;
+    uint32 delay = 2;
+    uint32 buffer = 3;
+  }
+
+  message DigitalOutputPortReference {
+    qm.grpc.qua_config.QuaConfig.PortReference port = 1;
+  }
+
+  message PortReference {
+    string controller = 1;
+    uint32 number = 2;
+    uint32 fem = 3;
+  }
+
+  message MicrowaveInputPortReference {
+    qm.grpc.qua_config.QuaConfig.DacPortReference port = 1;
+    uint32 upconverter = 3;
+  }
+
+  message MicrowaveOutputPortReference {
+    qm.grpc.qua_config.QuaConfig.AdcPortReference port = 1;
+  }
+
+  message PulseDec {
+    enum Operation {
+      MEASUREMENT = 0;
+      CONTROL = 1;
+    }
+
+    uint32 length = 2;
+    uint32 operation = 3;
+    map<string, string> waveforms = 4;
+    google.protobuf.StringValue digitalMarker = 5;
+    map<string, string> integrationWeights = 8;
+  }
+
+  message WaveformDec {
+    oneof waveform_oneof {
+      qm.grpc.qua_config.QuaConfig.ArbitraryWaveformDec arbitrary = 1;
+      qm.grpc.qua_config.QuaConfig.ConstantWaveformDec constant = 2;
+      qm.grpc.qua_config.QuaConfig.CompressedWaveformDec compressed = 3;
+      qm.grpc.qua_config.QuaConfig.WaveformArrayDec array = 4;
+    }
+  }
+
+  message ArbitraryWaveformDec {
+    repeated double samples = 1;
+    double multiplier = 2;
+    double deprecatedMaxAllowedError = 3;
+    google.protobuf.DoubleValue maxAllowedError = 4;
+    google.protobuf.DoubleValue samplingRate = 5;
+    bool isOverridable = 6;
+  }
+
+  message ConstantWaveformDec {
+    double sample = 1;
+    double multiplier = 2;
+  }
+
+  message WaveformArrayDec {
+    repeated qm.grpc.qua_config.QuaConfig.WaveformSamples samples_array = 1;
+  }
+
+  message WaveformSamples {
+    repeated double samples = 1;
+  }
+
+  message CompressedWaveformDec {
+    repeated double samples = 1;
+    double sampleRate = 2;
+  }
+
+  message DigitalWaveformDec {
+    repeated qm.grpc.qua_config.QuaConfig.DigitalWaveformSample samples = 1;
+  }
+
+  message DigitalWaveformSample {
+    bool value = 1;
+    uint32 length = 2;
+  }
+
+  message MixerDec {
+    repeated qm.grpc.qua_config.QuaConfig.CorrectionEntry correction = 1;
+  }
+
+  message IntegrationWeightDec {
+    repeated qm.grpc.qua_config.QuaConfig.IntegrationWeightSample cosine = 1;
+    repeated qm.grpc.qua_config.QuaConfig.IntegrationWeightSample sine = 2;
+  }
+
+  message IntegrationWeightSample {
+    double value = 1;
+    uint32 length = 2;
+  }
+
+  message CorrectionEntry {
+    uint64 frequency = 1;
+    uint64 loFrequency = 2;
+    qm.grpc.qua_config.QuaConfig.Matrix correction = 3;
+    bool frequencyNegative = 4;
+    double frequencyDouble = 5;
+    double loFrequencyDouble = 6;
+  }
+
+  message Matrix {
+    double v00 = 1;
+    double v01 = 2;
+    double v10 = 3;
+    double v11 = 4;
+  }
+
+  message Octave {
+    message Config {
+      repeated qm.grpc.qua_config.QuaConfig.Octave.Loopback loopbacks = 1;
+      map<uint32, qm.grpc.qua_config.QuaConfig.Octave.RFOutputConfig> rf_outputs = 2;
+      map<uint32, qm.grpc.qua_config.QuaConfig.Octave.RFInputConfig> rf_inputs = 3;
+      qm.grpc.qua_config.QuaConfig.Octave.IFOutputsConfig if_outputs = 4;
+    }
+
+    message Loopback {
+      qm.grpc.qua_config.QuaConfig.Octave.LoopbackInput lo_source_input = 1;
+      qm.grpc.qua_config.QuaConfig.Octave.SynthesizerPort lo_source_generator = 2;
+    }
+
+    message SynthesizerPort {
+      string device_name = 1;
+      qm.grpc.qua_config.QuaConfig.Octave.SynthesizerOutputName port_name = 2;
+    }
+
+    message RFOutputConfig {
+      double LO_frequency = 1;
+      qm.grpc.qua_config.QuaConfig.Octave.LOSourceInput LO_source = 2;
+      qm.grpc.qua_config.QuaConfig.Octave.OutputSwitchState output_mode = 3;
+      float gain = 4;
+      bool input_attenuators = 5;
+      qm.grpc.qua_config.QuaConfig.DacPortReference I_connection = 6;
+      qm.grpc.qua_config.QuaConfig.DacPortReference Q_connection = 7;
+    }
+
+    message RFInputConfig {
+      qm.grpc.qua_config.QuaConfig.Octave.DownconverterRFSource RF_source = 1;
+      double LO_frequency = 2;
+      qm.grpc.qua_config.QuaConfig.Octave.LOSourceInput LO_source = 3;
+      qm.grpc.qua_config.QuaConfig.Octave.IFMode IF_mode_I = 4;
+      qm.grpc.qua_config.QuaConfig.Octave.IFMode IF_mode_Q = 5;
+    }
+
+    message SingleIFOutputConfig {
+      qm.grpc.qua_config.QuaConfig.AdcPortReference port = 1;
+      string name = 2;
+    }
+
+    message IFOutputsConfig {
+      qm.grpc.qua_config.QuaConfig.Octave.SingleIFOutputConfig IF_out1 = 1;
+      qm.grpc.qua_config.QuaConfig.Octave.SingleIFOutputConfig IF_out2 = 2;
+    }
+
+    enum SynthesizerOutputName {
+      synth1 = 0;
+      synth2 = 1;
+      synth3 = 2;
+      synth4 = 3;
+      synth5 = 4;
+    }
+
+    enum LOSourceInput {
+      not_set = 0;
+      internal = 1;
+      external = 2;
+      analyzer = 3;
+    }
+
+    enum LoopbackInput {
+      undefined = 0;
+      LO1 = 1;
+      LO2 = 2;
+      LO3 = 3;
+      LO4 = 4;
+      LO5 = 5;
+      Dmd1LO = 6;
+      Dmd2LO = 7;
+    }
+
+    enum DownconverterRFSource {
+      rf_in = 0;
+      loopback_1 = 1;
+      loopback_2 = 2;
+      loopback_3 = 3;
+      loopback_4 = 4;
+      loopback_5 = 5;
+    }
+
+    enum OutputSwitchState {
+      unset = 0;
+      always_on = 1;
+      always_off = 2;
+      triggered = 3;
+      triggered_reversed = 4;
+    }
+
+    enum IFMode {
+      direct = 0;
+      mixer = 1;
+      envelope = 2;
+      off = 3;
+    }
+
+  }
+
+  enum VoltageLevel {
+    LVTTL = 0;
+    TTL = 1;
+  }
+
+  enum OutputSwitchState {
+    unset = 0;
+    always_on = 1;
+    always_off = 2;
+    triggered = 3;
+    triggered_reversed = 4;
+  }
+
+  int32 revision = 11;
+  oneof config_version {
+    qm.grpc.qua_config.QuaConfig.QuaConfigV1 v1beta = 1;
+    qm.grpc.qua_config.QuaConfig.QuaConfigV2 v2 = 2;
+  }
+  reserved 3 to 10;
+}
+

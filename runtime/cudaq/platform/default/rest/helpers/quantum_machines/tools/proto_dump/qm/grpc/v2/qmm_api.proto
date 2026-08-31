@@ -1,0 +1,317 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/grpc/v2/qmm_api.proto
+
+syntax = "proto3";
+
+package qm.grpc.v2;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "qm/grpc/v2/common_types.proto";
+import "qm/pb/compiler.proto";
+import "qm/pb/frontend.proto";
+import "qm/pb/inc_qua.proto";
+import "qm/pb/inc_qua_config.proto";
+import "qm/pb/qm_manager.proto";
+
+option java_package = "qm.client.api.v2";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message GetVersionRequest {
+}
+
+message QmmServiceResetDataProcessingRequest {
+}
+
+message QmmServiceGetQuantumMachineRequest {
+  string machine_id = 1;
+}
+
+message QmmServiceCloseQuantumMachineRequest {
+  string machine_id = 1;
+}
+
+message HealthCheckRequest {
+}
+
+message HealthCheckResponse {
+  message HealthCheckResponseSuccess {
+    bool ok = 2;
+    map<string, qm.grpc.v2.HealthCheckResponse.HealthCheckResponseSuccess> components = 3;
+    map<string, google.protobuf.Any> details = 4;
+  }
+
+  message HealthCheckResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.HealthCheckResponse.HealthCheckResponseSuccess success = 1;
+    qm.grpc.v2.HealthCheckResponse.HealthCheckResponseError error = 2;
+  }
+}
+
+message OpenQuantumMachineRequest {
+  enum CloseMode {
+    CLOSE_MODE_UNSPECIFIED = 0;
+    CLOSE_MODE_IF_NEEDED = 1;
+    CLOSE_MODE_ALL = 2;
+  }
+
+  qm.grpc.qua_config.QuaConfig config = 1;
+  qm.grpc.v2.OpenQuantumMachineRequest.CloseMode close_mode = 2;
+}
+
+message OpenQuantumMachineResponse {
+  message OpenQuantumMachineResponseSuccess {
+    string quantum_machine_id = 1;
+    repeated qm.grpc.qm_manager.OpenQmWarning open_qm_warnings = 2;
+  }
+
+  message OpenQuantumMachineResponseError {
+    repeated qm.grpc.qm_manager.ConfigValidationMessage config_validation_errors = 1;
+    repeated qm.grpc.qm_manager.PhysicalValidationMessage physical_validation_errors = 2;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.OpenQuantumMachineResponse.OpenQuantumMachineResponseSuccess success = 1;
+    qm.grpc.v2.OpenQuantumMachineResponse.OpenQuantumMachineResponseError error = 2;
+  }
+}
+
+message GetQuantumMachineResponse {
+  message GetQuantumMachineResponseSuccess {
+    string machine_id = 2;
+    qm.grpc.qua_config.QuaConfig config = 3;
+  }
+
+  message GetQuantumMachineResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetQuantumMachineResponse.GetQuantumMachineResponseSuccess success = 1;
+    qm.grpc.v2.GetQuantumMachineResponse.GetQuantumMachineResponseError error = 2;
+  }
+}
+
+message GetControllersRequest {
+}
+
+message ListOpenQuantumMachinesRequest {
+}
+
+message ListOpenQuantumMachinesResponse {
+  message ListOpenQuantumMachinesResponseSuccess {
+    repeated string machine_ids = 1;
+  }
+
+  message ListOpenQuantumMachinesResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.ListOpenQuantumMachinesResponse.ListOpenQuantumMachinesResponseSuccess success = 1;
+    qm.grpc.v2.ListOpenQuantumMachinesResponse.ListOpenQuantumMachinesResponseError error = 2;
+  }
+}
+
+message CloseAllQuantumMachinesRequest {
+}
+
+message JobsQueryParams {
+  repeated string quantum_machine_ids = 1;
+  repeated string job_ids = 2;
+  repeated string user_ids = 3;
+  string description = 4;
+  repeated qm.grpc.v2.JobExecutionStatus status = 5;
+}
+
+message JobResponseData {
+  string job_id = 1;
+  string description = 2;
+  qm.grpc.v2.JobExecutionStatus status = 3;
+  qm.grpc.v2.JobMetadata metadata = 4;
+  bool is_simulation = 5;
+}
+
+message JobMetadata {
+  google.protobuf.Timestamp created_at = 1;
+  google.protobuf.Timestamp started_at = 2;
+  google.protobuf.Timestamp last_status_updated_at = 3;
+}
+
+message GetJobsRequest {
+  qm.grpc.v2.JobsQueryParams query = 1;
+}
+
+message GetJobsResponse {
+  oneof response_oneof {
+    qm.grpc.v2.GetJobsSuccess success = 1;
+    qm.grpc.v2.GetJobsError error = 2;
+  }
+}
+
+message GetJobsError {
+  string details = 1;
+}
+
+message GetJobsSuccess {
+  repeated qm.grpc.v2.JobResponseData jobs = 2;
+}
+
+message GetControllersResponse {
+  message GetControllersResponseSuccess {
+    map<string, qm.grpc.v2.GetControllersResponse.Controller> control_devices = 1;
+  }
+
+  message GetControllersResponseError {
+    string details = 1;
+  }
+
+  message Controller {
+    string hostname = 1;
+    qm.grpc.v2.GetControllersResponse.ControllerType controller_type = 2;
+    map<uint32, qm.grpc.v2.GetControllersResponse.Fem> fems = 3;
+    map<string, double> temperatures = 4;
+  }
+
+  message Fem {
+    qm.grpc.v2.GetControllersResponse.FemType type = 1;
+  }
+
+  enum FemType {
+    FEM_TYPE_UNSPECIFIED = 0;
+    FEM_TYPE_LF = 1;
+    FEM_TYPE_MW = 2;
+  }
+
+  enum ControllerType {
+    CONTROLLER_TYPE_UNSPECIFIED = 0;
+    CONTROLLER_TYPE_OPX_1000 = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetControllersResponse.GetControllersResponseSuccess success = 1;
+    qm.grpc.v2.GetControllersResponse.GetControllersResponseError error = 2;
+  }
+}
+
+message GetVersionResponse {
+  message GetVersionResponseSuccess {
+    string gateway = 2;
+    map<string, string> controllers = 3;
+  }
+
+  message GetVersionResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.GetVersionResponse.GetVersionResponseSuccess success = 1;
+    qm.grpc.v2.GetVersionResponse.GetVersionResponseError error = 2;
+  }
+}
+
+message QmmServiceSimulateRequest {
+  qm.grpc.qua_config.QuaConfig config = 1;
+  qm.grpc.qua.QuaProgram high_level_program = 3;
+  qm.grpc.frontend.ExecutionRequest.Simulate simulate = 4;
+  repeated qm.grpc.frontend.InterOpxConnection controller_connections = 5;
+}
+
+message QmmServiceSimulateResponse {
+  oneof response_oneof {
+    qm.grpc.v2.SimulationSuccess success = 1;
+    qm.grpc.v2.SimulationError error = 2;
+  }
+}
+
+message SimulationSuccess {
+  string job_id = 1;
+  repeated qm.grpc.compiler.CompilerMessage messages = 2;
+  qm.grpc.frontend.SimulatedResponsePart simulated = 3;
+}
+
+message SimulationError {
+  string details = 1;
+  repeated qm.grpc.qm_manager.ConfigValidationMessage config_validation_errors = 2;
+  repeated qm.grpc.qm_manager.PhysicalValidationMessage physical_validation_errors = 3;
+  repeated qm.grpc.compiler.CompilerMessage messages = 4;
+}
+
+message ResetDataProcessingResponse {
+  message ResetDataProcessingResponseSuccess {
+  }
+
+  message ResetDataProcessingResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.ResetDataProcessingResponse.ResetDataProcessingResponseSuccess success = 1;
+    qm.grpc.v2.ResetDataProcessingResponse.ResetDataProcessingResponseError error = 2;
+  }
+}
+
+message CloseQuantumMachineResponse {
+  message CloseQuantumMachineResponseSuccess {
+  }
+
+  message CloseQuantumMachineResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.CloseQuantumMachineResponse.CloseQuantumMachineResponseSuccess success = 1;
+    qm.grpc.v2.CloseQuantumMachineResponse.CloseQuantumMachineResponseError error = 2;
+  }
+}
+
+message CloseAllQuantumMachinesResponse {
+  message CloseAllQuantumMachinesResponseSuccess {
+  }
+
+  message CloseAllQuantumMachinesResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.CloseAllQuantumMachinesResponse.CloseAllQuantumMachinesResponseSuccess success = 1;
+    qm.grpc.v2.CloseAllQuantumMachinesResponse.CloseAllQuantumMachinesResponseError error = 2;
+  }
+}
+
+message ClearAllJobResultsRequest {
+}
+
+message ClearAllJobResultsResponse {
+  message ClearAllJobResultsResponseSuccess {
+  }
+
+  message ClearAllJobResultsResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.ClearAllJobResultsResponse.ClearAllJobResultsResponseSuccess success = 1;
+    qm.grpc.v2.ClearAllJobResultsResponse.ClearAllJobResultsResponseError error = 2;
+  }
+}
+
+service QmmService {
+  rpc GetVersion (qm.grpc.v2.GetVersionRequest) returns (qm.grpc.v2.GetVersionResponse);
+  rpc HealthCheck (qm.grpc.v2.HealthCheckRequest) returns (qm.grpc.v2.HealthCheckResponse);
+  rpc GetControllers (qm.grpc.v2.GetControllersRequest) returns (qm.grpc.v2.GetControllersResponse);
+  rpc OpenQuantumMachine (qm.grpc.v2.OpenQuantumMachineRequest) returns (qm.grpc.v2.OpenQuantumMachineResponse);
+  rpc GetQuantumMachine (qm.grpc.v2.QmmServiceGetQuantumMachineRequest) returns (qm.grpc.v2.GetQuantumMachineResponse);
+  rpc ListOpenQuantumMachines (qm.grpc.v2.ListOpenQuantumMachinesRequest) returns (qm.grpc.v2.ListOpenQuantumMachinesResponse);
+  rpc CloseAllQuantumMachines (qm.grpc.v2.CloseAllQuantumMachinesRequest) returns (qm.grpc.v2.CloseAllQuantumMachinesResponse);
+  rpc ClearAllJobResults (qm.grpc.v2.ClearAllJobResultsRequest) returns (qm.grpc.v2.ClearAllJobResultsResponse);
+  rpc GetJobs (qm.grpc.v2.GetJobsRequest) returns (qm.grpc.v2.GetJobsResponse);
+  rpc ResetDataProcessing (qm.grpc.v2.QmmServiceResetDataProcessingRequest) returns (qm.grpc.v2.ResetDataProcessingResponse);
+  rpc Simulate (qm.grpc.v2.QmmServiceSimulateRequest) returns (qm.grpc.v2.QmmServiceSimulateResponse);
+}
+

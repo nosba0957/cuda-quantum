@@ -1,0 +1,253 @@
+// ========================================================================== //
+// Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                 //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+// Minimal subset of the Quantum Machines QOP 3.x gRPC API: the six RPCs the
+// CUDA-Q quantum_machines executor calls. Field numbers, message names, package
+// and service names must match the real descriptors exactly -- regenerate
+// tools/proto_dump/ with tools/dump_protos.py and diff before changing any.
+// Verified against QOP 3.6.0-13160.a7d6ed8.
+
+syntax = "proto3";
+
+package qm.grpc.v2;
+
+option optimize_for = LITE_RUNTIME;
+
+// Wire-identical stand-ins for types defined in other packages, restated here
+// so nothing outside this file has to be compiled and LITE_RUNTIME stays legal.
+// Nested type names are not transmitted; only field number and type matter.
+
+// google.protobuf.Int64Value
+message Int64Value {
+  int64 value = 1;
+}
+
+// qm.grpc.general_messages.MessageLevel
+enum MessageLevel {
+  Message_LEVEL_ERROR = 0;
+  Message_LEVEL_WARNING = 1;
+  Message_LEVEL_INFO = 2;
+}
+
+// qm.grpc.compiler.CompilerMessage
+message CompilerMessage {
+  string message = 1;
+  MessageLevel level = 2;
+}
+
+// qm.grpc.qm_manager.ConfigValidationMessage, also used for the identically
+// shaped PhysicalValidationMessage.
+message ConfigValidationMessage {
+  string message = 1;
+  string group = 2;
+  string path = 3;
+  MessageLevel level = 4;
+}
+
+// qm.grpc.qm_manager.OpenQmWarning
+message OpenQmWarning {
+  int32 code = 1;
+  string message = 2;
+}
+
+// qm.grpc.job_manager.{Int,Fixed,Bool}StreamData
+message IntStreamData {
+  repeated int32 data = 1;
+}
+
+message FixedStreamData {
+  repeated double data = 1;
+}
+
+message BoolStreamData {
+  repeated bool data = 1;
+}
+
+message Range {
+  Int64Value from = 1;
+  Int64Value to = 2;
+}
+
+message GetVersionRequest {}
+
+message GetVersionResponse {
+  message GetVersionResponseSuccess {
+    string gateway = 2; // field 1 is unused in the real schema
+    map<string, string> controllers = 3;
+  }
+
+  message GetVersionResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    GetVersionResponseSuccess success = 1;
+    GetVersionResponseError error = 2;
+  }
+}
+
+message OpenQuantumMachineRequest {
+  enum CloseMode {
+    CLOSE_MODE_UNSPECIFIED = 0;
+    CLOSE_MODE_IF_NEEDED = 1;
+    CLOSE_MODE_ALL = 2;
+  }
+
+  // Really qm.grpc.qua_config.QuaConfig. A nested message and a bytes field are
+  // encoded identically, so this ships the blob tools/quam2pb.py produced
+  // without porting that schema. Do not turn this into a message type.
+  bytes config = 1;
+  CloseMode close_mode = 2;
+}
+
+message OpenQuantumMachineResponse {
+  message OpenQuantumMachineResponseSuccess {
+    string quantum_machine_id = 1;
+    repeated OpenQmWarning open_qm_warnings = 2;
+  }
+
+  message OpenQuantumMachineResponseError {
+    repeated ConfigValidationMessage config_validation_errors = 1;
+    repeated ConfigValidationMessage physical_validation_errors = 2;
+  }
+
+  oneof response_oneof {
+    OpenQuantumMachineResponseSuccess success = 1;
+    OpenQuantumMachineResponseError error = 2;
+  }
+}
+
+service QmmService {
+  rpc GetVersion(GetVersionRequest) returns (GetVersionResponse);
+  rpc OpenQuantumMachine(OpenQuantumMachineRequest)
+      returns (OpenQuantumMachineResponse);
+}
+
+message QmServiceCompileRequest {
+  string quantum_machine_id = 1;
+  // Really qm.grpc.qua.QuaProgram; opaque blob, see OpenQuantumMachineRequest.
+  bytes high_level_program = 2;
+  optional bytes config = 3;
+}
+
+message CompileResponse {
+  message CompilationSuccess {
+    string program_id = 1;
+    repeated CompilerMessage messages = 2;
+  }
+
+  message CompilationError {
+    string details = 1;
+    repeated CompilerMessage messages = 2;
+    repeated ConfigValidationMessage config_validation_errors = 3;
+  }
+
+  oneof response_oneof {
+    CompilationSuccess success = 1;
+    CompilationError error = 2;
+  }
+}
+
+message QmServiceAddCompiledToQueueRequest {
+  string quantum_machine_id = 1;
+  string program_id = 2;
+}
+
+message AddCompiledToQueueResponse {
+  message AddCompiledToQueueResponseSuccess {
+    string job_id = 1;
+  }
+
+  message AddCompiledToQueueResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    AddCompiledToQueueResponseSuccess success = 1;
+    AddCompiledToQueueResponseError error = 2;
+  }
+}
+
+service QmService {
+  rpc Compile(QmServiceCompileRequest) returns (CompileResponse);
+  rpc AddCompiledToQueue(QmServiceAddCompiledToQueueRequest)
+      returns (AddCompiledToQueueResponse);
+}
+
+message JobServicePushToInputStreamRequest {
+  string job_id = 1;
+  // Mangled: declare_input_stream(name="gamma") is "input_stream_gamma".
+  string stream_name = 2;
+
+  oneof stream_data_oneof {
+    IntStreamData int_stream_data = 3;
+    FixedStreamData fixed_stream_data = 4;
+    BoolStreamData bool_stream_data = 5;
+  }
+}
+
+message PushToInputStreamResponse {
+  message PushToInputStreamResponseSuccess {}
+
+  message PushToInputStreamResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    PushToInputStreamResponseSuccess success = 1;
+    PushToInputStreamResponseError error = 2;
+  }
+}
+
+message GetNamedResultsRequest {
+  message Output {
+    string output_name = 1;
+    Range range = 2;
+  }
+
+  string job_id = 1;
+  repeated Output outputs = 2;
+}
+
+// Singular: GetNamedResults streams back GetNamedResultResponse.
+message GetNamedResultResponse {
+  message GetNamedResultResponseError {
+    string details = 1;
+  }
+
+  message GetNamedResultResponseSuccess {
+    message DataChunk {
+      bytes data = 1;
+    }
+
+    message DataSummary {
+      int32 count = 1;
+    }
+
+    int32 count_of_items = 1;
+    bytes data = 2;
+    string output_name = 5;
+
+    oneof data_oneof {
+      DataChunk data_chunk = 3;
+      DataSummary data_summary = 4;
+    }
+  }
+
+  oneof response_oneof {
+    GetNamedResultResponseSuccess success = 1;
+    GetNamedResultResponseError error = 2;
+  }
+}
+
+service JobService {
+  rpc PushToInputStream(JobServicePushToInputStreamRequest)
+      returns (PushToInputStreamResponse);
+  rpc GetNamedResults(GetNamedResultsRequest)
+      returns (stream GetNamedResultResponse);
+}

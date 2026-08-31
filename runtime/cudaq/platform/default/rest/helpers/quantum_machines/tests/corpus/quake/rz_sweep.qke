@@ -1,0 +1,24 @@
+// ========================================================================== //
+// Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                 //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+module {
+  func.func @rz_sweep() attributes {"cudaq-entrypoint"} {
+    %a = arith.constant 0.78539816339744828 : f64
+    %b = arith.constant 1.5707963267948966 : f64
+    %c = arith.constant 2.3561944901923448 : f64
+    %q = quake.alloca !quake.veq<1>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<1>) -> !quake.ref
+    quake.h %q0 : (!quake.ref) -> ()
+    quake.rz (%a) %q0 : (f64, !quake.ref) -> ()
+    quake.rz (%b) %q0 : (f64, !quake.ref) -> ()
+    quake.rz (%c) %q0 : (f64, !quake.ref) -> ()
+    quake.h %q0 : (!quake.ref) -> ()
+    %m0 = quake.mz %q0 : (!quake.ref) -> !quake.measure
+    return
+  }
+}

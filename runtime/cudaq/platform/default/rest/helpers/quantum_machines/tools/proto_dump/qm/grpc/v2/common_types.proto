@@ -1,0 +1,31 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/grpc/v2/common_types.proto
+
+syntax = "proto3";
+
+package qm.grpc.v2;
+
+import "google/protobuf/wrappers.proto";
+
+option java_package = "qm.client.api.v2";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+enum JobExecutionStatus {
+  UNSET = 0;
+  UNKNOWN = 1;
+  PENDING = 2;
+  RUNNING = 3;
+  COMPLETED = 4;
+  CANCELED = 5;
+  LOADING = 6;
+  ERROR = 7;
+  PROCESSING = 8;
+}
+
+message Range {
+  optional google.protobuf.Int64Value from = 1;
+  optional google.protobuf.Int64Value to = 2;
+}
+

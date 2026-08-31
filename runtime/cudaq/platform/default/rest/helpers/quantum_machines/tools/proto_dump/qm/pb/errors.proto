@@ -1,0 +1,41 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/errors.proto
+
+syntax = "proto3";
+
+package qm.grpc.errors;
+
+option java_package = "qm.grpc.errors";
+option java_outer_classname = "ErrorsProto";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+enum JobManagerErrorTypes {
+  JobManagerUnspecifiedError = 0;
+  MissingJobError = 1000;
+  InvalidJobExecutionStatusError = 1001;
+  InvalidOperationOnSimulatorJobError = 1002;
+  InvalidOperationOnRealJobError = 1003;
+  JobOperationSpecificError = 1004;
+  ConfigQueryError = 1005;
+  UnknownInputStreamError = 1006;
+}
+
+enum JobOperationSpecificErrorTypes {
+  JobOperationUnspecifiedError = 0;
+  SingleInputElementError = 3000;
+  InvalidCorrectionMatrixError = 3001;
+  ElementWithoutIntermediateFrequencyError = 3002;
+  InvalidDigitalInputThresholdError = 3003;
+  InvalidDigitalInputDeadtimeError = 3004;
+  InvalidDigitalInputPolarityError = 3005;
+}
+
+enum ConfigQueryErrorTypes {
+  ConfigQueryUnspecifiedError = 0;
+  MissingControllerError = 4000;
+  MissingElementError = 4001;
+  MissingDigitalInputError = 4002;
+}
+
