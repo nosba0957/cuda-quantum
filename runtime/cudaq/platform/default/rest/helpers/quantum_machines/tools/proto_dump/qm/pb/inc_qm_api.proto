@@ -1,0 +1,171 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/inc_qm_api.proto
+
+syntax = "proto3";
+
+package qm.grpc.qm_api;
+
+import "qm/pb/inc_qua_config.proto";
+import "qm/pb/general_messages.proto";
+import "google/protobuf/struct.proto";
+
+enum DigitalInputPortPolarity {
+  RISING = 0;
+  FALLING = 1;
+}
+
+message HighQmApiRequest {
+  message SetCorrection {
+    qm.grpc.qm_api.Matrix correction = 1;
+    oneof oneof_set_correction {
+      string qe = 10;
+      qm.grpc.qm_api.HighQmApiRequest.SetCorrectionMixerInfo mixer = 11;
+    }
+  }
+
+  message SetCorrectionMixerInfo {
+    string mixer = 1;
+    uint64 intermediateFrequency = 2;
+    uint64 loFrequency = 3;
+    bool frequencyNegative = 4;
+    double intermediateFrequencyDouble = 5;
+    double loFrequencyDouble = 6;
+  }
+
+  message SetFrequency {
+    double value = 1;
+    oneof oneof_set_frequency {
+      string qe = 10;
+    }
+  }
+
+  message SetDcOffset {
+    double I = 1;
+    double Q = 2;
+    oneof oneof_set_dc {
+      qm.grpc.qm_api.HighQmApiRequest.QePort qe = 10;
+    }
+  }
+
+  message SetOutputDcOffset {
+    double I = 1;
+    double Q = 2;
+    oneof oneof_set_dc {
+      qm.grpc.qm_api.HighQmApiRequest.QePort qe = 10;
+    }
+  }
+
+  message SetOutputFilterTaps {
+    qm.grpc.qm_api.HighQmApiRequest.AnalogOutputPortFilter filter = 1;
+    oneof oneof_set_filter_Taps {
+      qm.grpc.qm_api.HighQmApiRequest.QePort qe = 10;
+    }
+  }
+
+  message AnalogOutputPortFilter {
+    repeated double feedforward = 1;
+    repeated double feedback = 2;
+  }
+
+  message SetInputDcOffset {
+    double offset = 1;
+    oneof oneof_set_dc {
+      qm.grpc.qm_api.HighQmApiRequest.QePort qe = 10;
+    }
+  }
+
+  message SetDigitalRoute {
+    uint32 value = 1;
+    oneof oneof_set_digital_route {
+      qm.grpc.qm_api.HighQmApiRequest.QePort delay = 10;
+      qm.grpc.qm_api.HighQmApiRequest.QePort buffer = 11;
+      string tof = 12;
+      string smearing = 13;
+    }
+  }
+
+  message SetIOValues {
+    repeated qm.grpc.qm_api.HighQmApiRequest.IOValueSetData ioValueSetData = 51;
+    oneof oneof_setType {
+      bool all = 1;
+    }
+    reserved 2 to 50;
+  }
+
+  message QePort {
+    string qe = 1;
+    string port = 2;
+  }
+
+  message IOValueSetData {
+    int32 io_number = 1;
+    oneof oneof_IO_type {
+      int32 intValue = 2;
+      double doubleValue = 3;
+      bool booleanValue = 4;
+    }
+  }
+
+  message SetDigitalInputThreshold {
+    qm.grpc.qm_api.DigitalInputPort digitalPort = 1;
+    double threshold = 2;
+  }
+
+  message SetDigitalInputPolarity {
+    qm.grpc.qm_api.DigitalInputPort digitalPort = 1;
+    qm.grpc.qm_api.DigitalInputPortPolarity polarity = 2;
+  }
+
+  message SetDigitalInputDeadtime {
+    qm.grpc.qm_api.DigitalInputPort digitalPort = 1;
+    uint32 deadtime = 2;
+  }
+
+  qm.grpc.qm_api.QmConfig config = 1;
+  qm.grpc.qua_config.QuaConfig strongConfig = 2;
+  string quantumMachineId = 3;
+  oneof api_oneof {
+    qm.grpc.qm_api.HighQmApiRequest.SetCorrection setCorrection = 51;
+    qm.grpc.qm_api.HighQmApiRequest.SetFrequency setFrequency = 52;
+    qm.grpc.qm_api.HighQmApiRequest.SetDcOffset setDcOffset = 53;
+    qm.grpc.qm_api.HighQmApiRequest.SetDigitalRoute setDigitalRoute = 54;
+    qm.grpc.qm_api.HighQmApiRequest.SetIOValues setIOValues = 55;
+    qm.grpc.qm_api.HighQmApiRequest.SetInputDcOffset setInputDcOffset = 56;
+    qm.grpc.qm_api.HighQmApiRequest.SetOutputDcOffset setOutputDcOffset = 57;
+    qm.grpc.qm_api.HighQmApiRequest.SetOutputFilterTaps setOutputFilterTaps = 58;
+    qm.grpc.qm_api.HighQmApiRequest.SetDigitalInputThreshold setDigitalInputThreshold = 59;
+    qm.grpc.qm_api.HighQmApiRequest.SetDigitalInputDeadtime setDigitalInputDeadtime = 61;
+    qm.grpc.qm_api.HighQmApiRequest.SetDigitalInputPolarity setDigitalInputPolarity = 63;
+  }
+  reserved 4 to 50;
+}
+
+message DigitalInputPort {
+  string controllerName = 1;
+  uint32 portNumber = 2;
+  uint32 fem_Number = 3;
+}
+
+message HighQmApiResponse {
+  bool ok = 1;
+  repeated qm.grpc.general_messages.ErrorMessage errors = 2;
+}
+
+message QmConfig {
+  uint32 version = 1;
+  google.protobuf.Struct root = 2;
+}
+
+message Matrix {
+  double v00 = 1;
+  double v01 = 2;
+  double v10 = 3;
+  double v11 = 4;
+}
+
+message PortReference {
+  string controller = 1;
+  uint32 number = 2;
+}
+

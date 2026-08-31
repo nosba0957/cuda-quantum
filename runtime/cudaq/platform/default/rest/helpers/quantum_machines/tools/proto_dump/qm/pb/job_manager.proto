@@ -1,0 +1,108 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/job_manager.proto
+
+syntax = "proto3";
+
+package qm.grpc.job_manager;
+
+import "qm/pb/errors.proto";
+import "qm/pb/general_messages.proto";
+
+option java_package = "qm.grpc.jobManager";
+option java_outer_classname = "JobManagerServiceProto";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message GetElementCorrectionRequest {
+  string jobId = 1;
+  string qeName = 2;
+  qm.grpc.general_messages.Matrix correction = 3;
+}
+
+message GetElementCorrectionResponse {
+  qm.grpc.job_manager.JobManagerResponseHeader jobManagerResponseHeader = 1;
+  qm.grpc.general_messages.Matrix correction = 3;
+}
+
+message SetElementCorrectionRequest {
+  string jobId = 1;
+  string qeName = 2;
+  qm.grpc.general_messages.Matrix correction = 3;
+}
+
+message SetElementCorrectionResponse {
+  qm.grpc.job_manager.JobManagerResponseHeader jobManagerResponseHeader = 1;
+  qm.grpc.general_messages.Matrix correction = 2;
+}
+
+message JobManagerResponseHeader {
+  bool success = 1;
+  string jobId = 2;
+  qm.grpc.errors.JobManagerErrorTypes jobManagerErrorType = 10;
+  qm.grpc.job_manager.JobErrorDetails jobErrorDetails = 11;
+}
+
+message JobErrorDetails {
+  string message = 10;
+  oneof errorType {
+    qm.grpc.errors.JobOperationSpecificErrorTypes jobOperationSpecificErrorType = 1;
+    qm.grpc.errors.ConfigQueryErrorTypes configQueryErrorType = 2;
+  }
+}
+
+message JobOperationSpecificError {
+  qm.grpc.errors.JobOperationSpecificErrorTypes type = 1;
+  string message = 2;
+}
+
+message InsertInputStreamRequest {
+  string jobId = 1;
+  string streamName = 2;
+  oneof stream_data_oneof {
+    qm.grpc.job_manager.IntStreamData intStreamData = 3;
+    qm.grpc.job_manager.FixedStreamData fixedStreamData = 4;
+    qm.grpc.job_manager.BoolStreamData boolStreamData = 5;
+  }
+}
+
+message ChangeOscillatorFrequencyRequest {
+  enum UpdateComponentSelection {
+    both = 0;
+    upconverter = 1;
+    downconverter = 2;
+  }
+
+  string jobId = 1;
+  string elementName = 2;
+  double newFrequencyHz = 3;
+  qm.grpc.job_manager.ChangeOscillatorFrequencyRequest.UpdateComponentSelection updateComponent = 4;
+}
+
+message ChangeOscillatorFrequencyResponse {
+  qm.grpc.job_manager.JobManagerResponseHeader jobManagerResponseHeader = 1;
+}
+
+message IntStreamData {
+  repeated int32 data = 1;
+}
+
+message FixedStreamData {
+  repeated double data = 1;
+}
+
+message BoolStreamData {
+  repeated bool data = 1;
+}
+
+message InsertInputStreamResponse {
+  qm.grpc.job_manager.JobManagerResponseHeader jobManagerResponseHeader = 1;
+}
+
+service JobManagerService {
+  rpc GetElementCorrection (qm.grpc.job_manager.GetElementCorrectionRequest) returns (qm.grpc.job_manager.GetElementCorrectionResponse);
+  rpc SetElementCorrection (qm.grpc.job_manager.SetElementCorrectionRequest) returns (qm.grpc.job_manager.SetElementCorrectionResponse);
+  rpc InsertInputStream (qm.grpc.job_manager.InsertInputStreamRequest) returns (qm.grpc.job_manager.InsertInputStreamResponse);
+  rpc UpdateOscillatorFrequency (qm.grpc.job_manager.ChangeOscillatorFrequencyRequest) returns (qm.grpc.job_manager.ChangeOscillatorFrequencyResponse);
+}
+

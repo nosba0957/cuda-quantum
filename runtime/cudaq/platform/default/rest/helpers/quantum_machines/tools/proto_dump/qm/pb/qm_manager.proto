@@ -1,0 +1,100 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/qm_manager.proto
+
+syntax = "proto3";
+
+package qm.grpc.qm_manager;
+
+import "qm/pb/inc_qua_config.proto";
+import "qm/pb/general_messages.proto";
+
+option java_package = "qm.grpc.qmManager";
+option java_outer_classname = "QmManagerProto";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message OpenQuantumMachineRequest {
+  qm.grpc.qua_config.QuaConfig config = 1;
+  bool keep_dc_offsets_when_closing = 5;
+  oneof oneOfCloseOtherMachines {
+    bool never = 2;
+    bool always = 3;
+    bool ifNeeded = 4;
+  }
+}
+
+message OpenQuantumMachineResponse {
+  string machineID = 1;
+  bool success = 2;
+  repeated qm.grpc.qm_manager.ConfigValidationMessage configValidationErrors = 3;
+  repeated qm.grpc.qm_manager.PhysicalValidationMessage physicalValidationErrors = 4;
+  repeated qm.grpc.qm_manager.OpenQmWarning openQmWarnings = 5;
+}
+
+message CloseQuantumMachineRequest {
+  string machineID = 1;
+}
+
+message CloseQuantumMachineResponse {
+  bool success = 1;
+  repeated qm.grpc.general_messages.ErrorMessage errors = 2;
+}
+
+message GetQuantumMachineRequest {
+  string machineID = 1;
+}
+
+message GetQuantumMachineResponse {
+  string machineID = 1;
+  qm.grpc.qua_config.QuaConfig config = 2;
+  bool success = 3;
+  repeated qm.grpc.general_messages.ErrorMessage errors = 4;
+}
+
+message GetRunningJobRequest {
+  string machineID = 1;
+}
+
+message GetRunningJobResponse {
+  string machineID = 1;
+  string jobId = 2;
+}
+
+message ListOpenQuantumMachinesResponse {
+  repeated string machineIDs = 1;
+}
+
+message CloseAllQuantumMachinesResponse {
+  bool success = 1;
+  repeated qm.grpc.general_messages.ErrorMessage errors = 2;
+}
+
+message GetControllersResponse {
+  repeated qm.grpc.qm_manager.Controller controllers = 1;
+}
+
+message Controller {
+  string name = 1;
+  optional double temperature = 2;
+}
+
+message ConfigValidationMessage {
+  string message = 1;
+  string group = 2;
+  string path = 3;
+  qm.grpc.general_messages.MessageLevel level = 4;
+}
+
+message PhysicalValidationMessage {
+  string message = 1;
+  string group = 2;
+  string path = 3;
+  qm.grpc.general_messages.MessageLevel level = 4;
+}
+
+message OpenQmWarning {
+  int32 code = 1;
+  string message = 2;
+}
+

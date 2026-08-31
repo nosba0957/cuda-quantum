@@ -1,0 +1,225 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/job_results.proto
+
+syntax = "proto3";
+
+package qm.grpc.results_analyser;
+
+import "google/protobuf/wrappers.proto";
+import "qm/pb/general_messages.proto";
+import "google/protobuf/struct.proto";
+
+option java_package = "qm.grpc.results";
+option java_outer_classname = "JobResultsProto";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message GetJobResultSchemaRequest {
+  string jobId = 1;
+}
+
+message GetJobResultSchemaResponse {
+  message Item {
+    string name = 1;
+    string simpleDType = 2;
+    bool isSingle = 3;
+    int32 expectedCount = 4;
+    repeated int32 shape = 5;
+  }
+
+  repeated qm.grpc.results_analyser.GetJobResultSchemaResponse.Item items = 1;
+}
+
+message GetJobStateRequest {
+  string jobId = 1;
+}
+
+message GetJobStateResponse {
+  bool done = 1;
+  bool closed = 2;
+  bool hasDataloss = 3;
+}
+
+message GetJobNamedResultHeaderRequest {
+  string jobId = 1;
+  string outputName = 2;
+  bool flatFormat = 3;
+}
+
+message GetJobNamedResultHeaderResponse {
+  bool isSingle = 1;
+  int32 countSoFar = 2;
+  string simpleDType = 3;
+  bool done = 4;
+  bool closed = 5;
+  bool hasDataloss = 6;
+  repeated int32 shape = 7;
+  google.protobuf.BoolValue hasExecutionErrors = 8;
+}
+
+message GetJobNamedResultRequest {
+  string jobId = 1;
+  string outputName = 2;
+  int32 offset = 3;
+  int32 limit = 4;
+  google.protobuf.Int64Value longOffset = 5;
+}
+
+message GetJobNamedResultResponse {
+  int32 countOfItems = 1;
+  bytes data = 2;
+}
+
+message GetJobErrorsRequest {
+  string jobId = 1;
+}
+
+message GetJobErrorsResponse {
+  message Error {
+    int32 errorCode = 1;
+    qm.grpc.results_analyser.GetJobErrorsResponse.ExecutionErrorSeverity errorSeverity = 2;
+    string message = 3;
+  }
+
+  enum ExecutionErrorSeverity {
+    ERROR = 0;
+    WARNING = 1;
+  }
+
+  repeated qm.grpc.results_analyser.GetJobErrorsResponse.Error errors = 1;
+  string jobId = 2;
+}
+
+message PullAnalysedResultsRequest {
+  string jobFilePath = 1;
+  string metadata = 2;
+  bool containsVersion = 3;
+}
+
+message AnalysedResultsResponse {
+  string version = 1;
+  repeated qm.grpc.results_analyser.IcpResultData icpResults = 11;
+  repeated qm.grpc.results_analyser.StreamResultData streamResults = 12;
+  repeated qm.grpc.general_messages.ErrorMessage errors = 13;
+  reserved 2 to 10;
+}
+
+message PullResultOutputRequest {
+  string jobId = 1;
+  string outputName = 2;
+}
+
+message PullResultOutputResponse {
+  message Header {
+    string version = 1;
+    string outputName = 2;
+    bool dataLoss = 3;
+    repeated qm.grpc.general_messages.ErrorMessage errors = 4;
+    bool single = 5;
+  }
+
+  message Data {
+    google.protobuf.Value results = 1;
+  }
+
+  message Npz {
+    bytes npz = 1;
+  }
+
+  message Npy {
+    string name = 1;
+    bytes npy = 2;
+    int64 count = 3;
+  }
+
+  oneof response {
+    qm.grpc.results_analyser.PullResultOutputResponse.Data data = 1;
+    qm.grpc.results_analyser.PullResultOutputResponse.Header header = 2;
+    qm.grpc.results_analyser.PullResultOutputResponse.Npz npz = 3;
+    qm.grpc.results_analyser.PullResultOutputResponse.Npy npy = 4;
+  }
+}
+
+message BinaryWrapper {
+  repeated bytes data = 1;
+}
+
+message PullFileResultRequest {
+  string jobId = 1;
+  string metadata = 2;
+  oneof fileType {
+    bool asNpz = 4;
+  }
+}
+
+message FileResultResponse {
+  string jobId = 1;
+  string controllerName = 2;
+  string group = 3;
+  string version = 10;
+  repeated qm.grpc.general_messages.ErrorMessage errors = 11;
+  oneof file {
+    bytes npz = 4;
+  }
+}
+
+message PullSimulatorSamplesRequest {
+  string jobId = 1;
+  bool includeAnalog = 2;
+  bool includeDigital = 3;
+  bool includeAllConnections = 5;
+  oneof fileType {
+    bool asNpz = 4;
+  }
+}
+
+message SimulatorSamplesResponse {
+  message Header {
+    string simpleDType = 1;
+    int32 countOfItems = 2;
+  }
+
+  message Data {
+    bytes data = 8;
+  }
+
+  string jobId = 1;
+  bool ok = 5;
+  oneof body {
+    qm.grpc.results_analyser.SimulatorSamplesResponse.Header header = 6;
+    qm.grpc.results_analyser.SimulatorSamplesResponse.Data data = 7;
+  }
+  reserved 2 to 4;
+}
+
+message IcpResultData {
+  string name = 1;
+  uint64 timestamp = 2;
+  bool dataLoss = 3;
+  oneof data {
+    int32 intValue = 11;
+    double doubleValue = 12;
+    bool booleanValue = 13;
+  }
+  reserved 4 to 10;
+}
+
+message StreamResultData {
+  string name = 1;
+  uint64 timestamp = 2;
+  bool dataLoss = 3;
+  bool multipleSources = 4;
+  string dataSourceName = 5;
+  int64 data = 11;
+  reserved 6 to 10;
+}
+
+service JobResultsService {
+  rpc GetJobResultSchema (qm.grpc.results_analyser.GetJobResultSchemaRequest) returns (qm.grpc.results_analyser.GetJobResultSchemaResponse);
+  rpc GetJobState (qm.grpc.results_analyser.GetJobStateRequest) returns (qm.grpc.results_analyser.GetJobStateResponse);
+  rpc GetJobNamedResultHeader (qm.grpc.results_analyser.GetJobNamedResultHeaderRequest) returns (qm.grpc.results_analyser.GetJobNamedResultHeaderResponse);
+  rpc GetJobNamedResult (qm.grpc.results_analyser.GetJobNamedResultRequest) returns (stream qm.grpc.results_analyser.GetJobNamedResultResponse);
+  rpc GetJobErrors (qm.grpc.results_analyser.GetJobErrorsRequest) returns (qm.grpc.results_analyser.GetJobErrorsResponse);
+}
+

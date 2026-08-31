@@ -536,7 +536,7 @@ if [ -n "$CURL_INSTALL_PREFIX" ] && [ -z "$(echo $exclude_prereq | grep curl)" ]
       -DUSE_LIBIDN2=OFF \
       -DCURL_BROTLI=OFF \
       -DCURL_ZSTD=OFF \
-      -DUSE_NGHTTP2=OFF \
+      -DUSE_NGHTTP2=ON \
       -DENABLE_ARES=OFF \
       -DCURL_DISABLE_FTP=ON \
       -DCURL_DISABLE_TFTP=ON \

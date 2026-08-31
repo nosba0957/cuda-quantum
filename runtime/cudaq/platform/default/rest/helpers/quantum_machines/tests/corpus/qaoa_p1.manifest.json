@@ -1,0 +1,43 @@
+{
+  "input_stream": "input_stream_angles",
+  "input_stream_type": "fixed",
+  "input_stream_size": 9,
+  "angles": [
+    "theta_0",
+    "theta_1",
+    "theta_2",
+    "theta_3",
+    "theta_4",
+    "theta_5",
+    "theta_6",
+    "theta_7",
+    "theta_8"
+  ],
+  "angle_values": [
+    1.4,
+    1.4,
+    1.4,
+    1.4,
+    0.6,
+    0.6,
+    0.6,
+    0.6,
+    0.6
+  ],
+  "shots": 1024,
+  "iterations": 1024,
+  "result_streams": [
+    {
+      "name": "var6",
+      "size": 5
+    }
+  ],
+  "qubits": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "bytes": 15111
+}

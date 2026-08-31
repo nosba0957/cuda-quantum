@@ -1,0 +1,51 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/compiler.proto
+
+syntax = "proto3";
+
+package qm.grpc.compiler;
+
+import "qm/pb/inc_qua.proto";
+import "google/protobuf/struct.proto";
+import "qm/pb/qm_manager.proto";
+import "qm/pb/general_messages.proto";
+
+option java_package = "qm.grpc.compiler";
+option java_outer_classname = "CompilerProto";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message QuaValues {
+  uint32 int_value = 1;
+  double double_value = 2;
+  bool boolean_value = 3;
+}
+
+message CompileRequest {
+  qm.grpc.qua.QuaProgram program = 1;
+  string jobId = 2;
+}
+
+message CompileResponse {
+  bool ok = 1;
+  repeated qm.grpc.compiler.CompilerMessage messages = 2;
+  bytes binary = 3;
+  string metadata = 4;
+  map<string, string> debug = 30;
+}
+
+message CompilerMessage {
+  string message = 1;
+  qm.grpc.general_messages.MessageLevel level = 2;
+}
+
+message ValidationResponse {
+  repeated qm.grpc.qm_manager.ConfigValidationMessage messages = 1;
+}
+
+message DynamicConfig {
+  uint32 version = 1;
+  google.protobuf.Struct root = 2;
+}
+

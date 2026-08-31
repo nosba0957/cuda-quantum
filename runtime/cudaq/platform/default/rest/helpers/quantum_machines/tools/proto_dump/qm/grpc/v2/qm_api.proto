@@ -1,0 +1,230 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/grpc/v2/qm_api.proto
+
+syntax = "proto3";
+
+package qm.grpc.v2;
+
+import "qm/grpc/v2/common_types.proto";
+import "qm/grpc/v2/qmm_api.proto";
+import "qm/pb/compiler.proto";
+import "qm/pb/frontend.proto";
+import "qm/pb/inc_qua.proto";
+import "qm/pb/inc_qua_config.proto";
+import "qm/pb/qm_manager.proto";
+
+option java_package = "qm.client.api.v2";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+message QmServiceGetConfigRequest {
+  string quantum_machine_id = 1;
+}
+
+message UpdateConfigRequest {
+  string quantum_machine_id = 1;
+  qm.grpc.qua_config.QuaConfig config = 2;
+}
+
+message UpdateConfigResponse {
+  message UpdateConfigResponseSuccess {
+  }
+
+  message UpdateConfigResponseError {
+    string details = 1;
+    repeated qm.grpc.qm_manager.ConfigValidationMessage config_validation_errors = 2;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.UpdateConfigResponse.UpdateConfigResponseSuccess success = 1;
+    qm.grpc.v2.UpdateConfigResponse.UpdateConfigResponseError error = 2;
+  }
+}
+
+message QmServiceCloseRequest {
+  string quantum_machine_id = 1;
+}
+
+message QmServiceCloseResponse {
+  message QmServiceCloseResponseSuccess {
+  }
+
+  message QmServiceCloseResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.QmServiceCloseResponse.QmServiceCloseResponseSuccess success = 1;
+    qm.grpc.v2.QmServiceCloseResponse.QmServiceCloseResponseError error = 2;
+  }
+}
+
+message QmServiceSimulateRequest {
+  string quantum_machine_id = 1;
+  qm.grpc.qua.QuaProgram high_level_program = 2;
+  qm.grpc.frontend.ExecutionRequest.Simulate simulate = 3;
+  repeated qm.grpc.frontend.InterOpxConnection controller_connections = 4;
+  optional qm.grpc.qua_config.QuaConfig config = 5;
+}
+
+message QmServiceSimulateResponse {
+  oneof response_oneof {
+    qm.grpc.v2.SimulationSuccess success = 1;
+    qm.grpc.v2.SimulationError error = 2;
+  }
+}
+
+message QmServiceJobsQueryParams {
+  string quantum_machine_id = 1;
+  repeated string job_ids = 2;
+  repeated string user_ids = 3;
+  string description = 4;
+  repeated qm.grpc.v2.JobExecutionStatus status = 5;
+}
+
+message QmServiceGetJobsRequest {
+  qm.grpc.v2.JobsQueryParams query = 1;
+}
+
+message RemoveJobsRequest {
+  qm.grpc.v2.JobsQueryParams query = 1;
+}
+
+message RemoveJobsResponse {
+  message RemoveJobsResponseSuccess {
+    repeated string removed_job_ids = 1;
+  }
+
+  message RemoveJobsResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.RemoveJobsResponse.RemoveJobsResponseSuccess success = 1;
+    qm.grpc.v2.RemoveJobsResponse.RemoveJobsResponseError error = 2;
+  }
+}
+
+message QmServiceGetConfigResponse {
+  oneof response_oneof {
+    qm.grpc.v2.GetConfigSuccess success = 1;
+    qm.grpc.v2.GetConfigError error = 2;
+  }
+}
+
+message GetConfigSuccess {
+  qm.grpc.qua_config.QuaConfig config = 1;
+}
+
+message GetConfigError {
+  string details = 1;
+}
+
+message QmServiceCompileRequest {
+  string quantum_machine_id = 1;
+  qm.grpc.qua.QuaProgram high_level_program = 2;
+  optional qm.grpc.qua_config.QuaConfig config = 3;
+}
+
+message CompileResponse {
+  message CompilationSuccess {
+    string program_id = 1;
+    repeated qm.grpc.compiler.CompilerMessage messages = 2;
+  }
+
+  message CompilationError {
+    string details = 1;
+    repeated qm.grpc.compiler.CompilerMessage messages = 2;
+    repeated qm.grpc.qm_manager.ConfigValidationMessage config_validation_errors = 3;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.CompileResponse.CompilationSuccess success = 1;
+    qm.grpc.v2.CompileResponse.CompilationError error = 2;
+  }
+}
+
+message QmServiceAddToQueueRequest {
+  string quantum_machine_id = 1;
+  qm.grpc.qua.QuaProgram high_level_program = 2;
+  qm.grpc.frontend.QueuePosition queue_position = 3;
+  optional qm.grpc.qua_config.QuaConfig config = 4;
+}
+
+message AddToQueueResponse {
+  message AddToQueueResponseSuccess {
+    string job_id = 1;
+    repeated qm.grpc.compiler.CompilerMessage messages = 2;
+  }
+
+  message AddToQueueResponseError {
+    string details = 1;
+    repeated qm.grpc.compiler.CompilerMessage messages = 2;
+    repeated qm.grpc.qm_manager.ConfigValidationMessage config_validation_errors = 3;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.AddToQueueResponse.AddToQueueResponseSuccess success = 1;
+    qm.grpc.v2.AddToQueueResponse.AddToQueueResponseError error = 2;
+  }
+}
+
+message QmServiceAddCompiledToQueueRequest {
+  string quantum_machine_id = 1;
+  string program_id = 2;
+}
+
+message AddCompiledToQueueResponse {
+  message AddCompiledToQueueResponseSuccess {
+    string job_id = 1;
+  }
+
+  message AddCompiledToQueueResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.AddCompiledToQueueResponse.AddCompiledToQueueResponseSuccess success = 1;
+    qm.grpc.v2.AddCompiledToQueueResponse.AddCompiledToQueueResponseError error = 2;
+  }
+}
+
+message QmServiceGetJobsResponse {
+  oneof response_oneof {
+    qm.grpc.v2.GetJobsSuccess success = 1;
+    qm.grpc.v2.GetJobsError error = 2;
+  }
+}
+
+message ResetDigitalFiltersRequest {
+  string quantum_machine_id = 1;
+}
+
+message ResetDigitalFiltersResponse {
+  message ResetDigitalFiltersResponseSuccess {
+  }
+
+  message ResetDigitalFiltersResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    qm.grpc.v2.ResetDigitalFiltersResponse.ResetDigitalFiltersResponseSuccess success = 1;
+    qm.grpc.v2.ResetDigitalFiltersResponse.ResetDigitalFiltersResponseError error = 2;
+  }
+}
+
+service QmService {
+  rpc UpdateConfig (qm.grpc.v2.UpdateConfigRequest) returns (qm.grpc.v2.UpdateConfigResponse);
+  rpc GetConfig (qm.grpc.v2.QmServiceGetConfigRequest) returns (qm.grpc.v2.QmServiceGetConfigResponse);
+  rpc Compile (qm.grpc.v2.QmServiceCompileRequest) returns (qm.grpc.v2.CompileResponse);
+  rpc Close (qm.grpc.v2.QmServiceCloseRequest) returns (qm.grpc.v2.QmServiceCloseResponse);
+  rpc AddToQueue (qm.grpc.v2.QmServiceAddToQueueRequest) returns (qm.grpc.v2.AddToQueueResponse);
+  rpc AddCompiledToQueue (qm.grpc.v2.QmServiceAddCompiledToQueueRequest) returns (qm.grpc.v2.AddCompiledToQueueResponse);
+  rpc GetJobs (qm.grpc.v2.QmServiceGetJobsRequest) returns (qm.grpc.v2.QmServiceGetJobsResponse);
+  rpc RemoveJobs (qm.grpc.v2.RemoveJobsRequest) returns (qm.grpc.v2.RemoveJobsResponse);
+  rpc Simulate (qm.grpc.v2.QmServiceSimulateRequest) returns (qm.grpc.v2.QmServiceSimulateResponse);
+  rpc ResetDigitalFilters (qm.grpc.v2.ResetDigitalFiltersRequest) returns (qm.grpc.v2.ResetDigitalFiltersResponse);
+}
+

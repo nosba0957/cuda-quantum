@@ -1,0 +1,48 @@
+// ========================================================================== //
+// Copyright (c) 2022 - 2025 NVIDIA Corporation & Affiliates.                 //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+module {
+  func.func @qaoa_p1() attributes {"cudaq-entrypoint"} {
+    %g = arith.constant 1.3999999999999999 : f64
+    %b = arith.constant 0.59999999999999998 : f64
+    %q = quake.alloca !quake.veq<5>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<5>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<5>) -> !quake.ref
+    %q2 = quake.extract_ref %q[2] : (!quake.veq<5>) -> !quake.ref
+    %q3 = quake.extract_ref %q[3] : (!quake.veq<5>) -> !quake.ref
+    %q4 = quake.extract_ref %q[4] : (!quake.veq<5>) -> !quake.ref
+    quake.h %q0 : (!quake.ref) -> ()
+    quake.h %q1 : (!quake.ref) -> ()
+    quake.h %q2 : (!quake.ref) -> ()
+    quake.h %q3 : (!quake.ref) -> ()
+    quake.h %q4 : (!quake.ref) -> ()
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%g) %q1 : (f64, !quake.ref) -> ()
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.x [%q1] %q2 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%g) %q2 : (f64, !quake.ref) -> ()
+    quake.x [%q1] %q2 : (!quake.ref, !quake.ref) -> ()
+    quake.x [%q2] %q3 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%g) %q3 : (f64, !quake.ref) -> ()
+    quake.x [%q2] %q3 : (!quake.ref, !quake.ref) -> ()
+    quake.x [%q3] %q4 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%g) %q4 : (f64, !quake.ref) -> ()
+    quake.x [%q3] %q4 : (!quake.ref, !quake.ref) -> ()
+    quake.rx (%b) %q0 : (f64, !quake.ref) -> ()
+    quake.rx (%b) %q1 : (f64, !quake.ref) -> ()
+    quake.rx (%b) %q2 : (f64, !quake.ref) -> ()
+    quake.rx (%b) %q3 : (f64, !quake.ref) -> ()
+    quake.rx (%b) %q4 : (f64, !quake.ref) -> ()
+    %m0 = quake.mz %q0 : (!quake.ref) -> !quake.measure
+    %m1 = quake.mz %q1 : (!quake.ref) -> !quake.measure
+    %m2 = quake.mz %q2 : (!quake.ref) -> !quake.measure
+    %m3 = quake.mz %q3 : (!quake.ref) -> !quake.measure
+    %m4 = quake.mz %q4 : (!quake.ref) -> !quake.measure
+    return
+  }
+}

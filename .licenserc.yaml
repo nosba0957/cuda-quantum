@@ -49,6 +49,11 @@ header:
     - 'cudaq/include/cudaq/Optimizer/CodeGen/OptUtils.h'
     - 'cudaq/lib/Optimizer/CodeGen/OptUtils.cpp'
     - 'runtime/cudaq/algorithms/optimizers/nlopt/nlopt-src'
+    # QuaProgram/QuaConfig fixtures and verbatim nvq++ qasm2 output;
+    # binary or format-locked, so none of them can carry a header
+    - 'runtime/cudaq/platform/default/rest/helpers/quantum_machines/tests/**/*.pb'
+    - 'runtime/cudaq/platform/default/rest/helpers/quantum_machines/tests/**/*.json'
+    - 'runtime/cudaq/platform/default/rest/helpers/quantum_machines/tests/corpus/*.qasm'
 
   comment: on-failure
 

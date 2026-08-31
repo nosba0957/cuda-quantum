@@ -1,0 +1,31 @@
+// Reconstructed from the descriptor pool of the installed qm-qua
+// package by tools/dump_protos.py.  Reference only -- not built.
+// Source file: qm/pb/general_messages.proto
+
+syntax = "proto3";
+
+package qm.grpc.general_messages;
+
+option java_package = "qm.grpc.generalMessages";
+option java_outer_classname = "GeneralMessagesProto";
+option objc_class_prefix = "HLW";
+option java_multiple_files = true;
+
+enum MessageLevel {
+  Message_LEVEL_ERROR = 0;
+  Message_LEVEL_WARNING = 1;
+  Message_LEVEL_INFO = 2;
+}
+
+message ErrorMessage {
+  int32 code = 1;
+  string message = 2;
+}
+
+message Matrix {
+  double v00 = 1;
+  double v01 = 2;
+  double v10 = 3;
+  double v11 = 4;
+}
+
