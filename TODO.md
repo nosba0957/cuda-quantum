@@ -281,6 +281,34 @@ runtime/cudaq/platform/default/rest/helpers/quantum_machines/
   tests/corpus/*.golden.pb
 ```
 
+## Working without the instrument
+
+The OPX is **not available for test jobs**. Only `AddCompiledToQueue` and anything
+downstream of it actually plays pulses; `GetVersion`, `OpenQuantumMachine` and
+`Compile` are non-disruptive and P1 already ran all three against the live QOP.
+
+| Blocked on instrument time | Proceeds now |
+|---|---|
+| `AddCompiledToQueue` | curl + nghttp2 rebuild |
+| `GetNamedResults` on real data | `GrpcCurl` unary — verify live, compile-only |
+| `PushToInputStream` to a live job | `GrpcCurl` streaming — against the mock |
+| P4 Bell counts, P5 QAOA loop | `QuaResults` decoder — synthetic buffers |
+| | `QMExecutor` + structure cache |
+| | P3's RPC-log gate — fully mockable |
+| | the three P1-verifier bug fixes |
+
+**The enabling piece is a mock QOP** speaking the six RPCs, built on the real
+descriptors. Precedent: `utils/mock_qpu/quantum_machines/` is the HTTP mock for the
+cloud target; this is its gRPC sibling.
+
+Note the one genuinely open question — *does libcurl's write callback deliver gRPC
+frames incrementally, or buffer the response to completion?* — is a question about
+**libcurl**, not the QOP. A mock emitting N frames with delays answers it fully.
+Hardware would answer it no better.
+
+Keep the endpoint configurable so the same tests run against the mock and, when the
+instrument frees up, against the real QOP unchanged.
+
 ## Phases
 
 Each phase: **agent 1 builds, agent 2 verifies against the stated gate.** The
@@ -320,13 +348,35 @@ verifier reports, it does not fix; failures come back for re-dispatch.
 - **Gate:** each golden reloads via `QuaProgram.FromString`, and `qm.compile()`
   against the live QOP accepts it.
 
-### P2 — gRPC client
+### P2 — gRPC client (reworked: no instrument time available)
+- [ ] **Rebuild `/usr/local/curl` with nghttp2.** `USE_NGHTTP2=ON` is already
+      flipped at `install_prerequisites.sh:539`, but the flag is inert unless
+      nghttp2 is present at configure time. Confirm with a runtime probe that
+      `CURL_VERSION_HTTP2` is set on the library CUDA-Q actually links — not the
+      distro one, which already has it and misled the P0 spike.
+- [ ] `tools/mock_qop.py` — a mock QOP speaking the six RPCs on the real
+      descriptors, with an **RPC log** callers can assert against, and a
+      `GetNamedResults` that emits N frames with configurable delays.
+      Precedent: `utils/mock_qpu/quantum_machines/` (the HTTP mock for the cloud
+      target). Endpoint must be configurable so the same tests point at the real
+      QOP later, unchanged.
 - [ ] `GrpcCurl`: unary call + server-stream frame reader over HTTP/2 h2c.
       Frame = `[0x00][4-byte BE length][message]`; check the `grpc-status`
-      trailer.
+      trailer. Handle the **trailers-only** error shape P0 found: `HTTP/2 200`,
+      zero-length body, `grpc-status` in the header block rather than trailers.
 - [ ] `QuaResults`: decode `GetNamedResults` buffers into `sample_result`.
-- **Gate:** a standalone C++ binary opens a QM from `qua_config.pb`, submits a
-  golden Bell program, and prints counts. No CUDA-Q involved yet.
+      Contract is fixed and recorded above — length-`creg.size` int buffer per
+      shot, bit `i` = clbit `i`, LSB-first. Count `shots` buffers per push to
+      segment iterations; there is no delimiter in the stream.
+- **Gate (achievable without the instrument):**
+  1. A C++ binary does `OpenQuantumMachine(qua_config.pb)` + `Compile(bell.golden.pb)`
+     against the **live QOP** and gets a program_id. Non-disruptive — P1 did
+     exactly this from Python. **Do not call `AddCompiledToQueue`.**
+  2. Against the mock, `GetNamedResults` returning 3 frames with delays is read
+     **incrementally** — prove libcurl does not buffer to completion. This is the
+     last unproven transport assumption, and hardware would not answer it better.
+  3. `QuaResults` decodes synthetic buffers to the expected counts.
+- **Deferred to instrument time:** submitting a job and reading real counts.
 
 ### P3 — QMExecutor
 - [ ] `QMExecutor : cudaq::Executor`, override `execute()`, register it.
@@ -373,6 +423,7 @@ verifier reports, it does not fix; failures come back for re-dispatch.
 
 - [x] ~~QOP version on `10.21.19.201`~~ — **QOP 3.6.0, `qm.grpc.v2.*`, port 9514.**
       Resolved in P0 against the live instrument.
-- [ ] **Is the OPX free for test jobs, or does it need booking?** Still open, and it
-      now blocks P2: `GetNamedResults` multi-frame streaming cannot be verified
-      without a live job. All work so far has been read-only (`GetVersion` only).
+- [x] ~~Is the OPX free for test jobs?~~ **No — not available as of 2026-08-31.**
+      Work is reordered around it: see "Working without the instrument" below.
+- [ ] Ping when the OPX frees up — P4/P5 and the streaming-against-real-data checks
+      are the only things waiting on it.
