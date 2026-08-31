@@ -194,9 +194,12 @@ The spike hard-fails on `features & CURL_VERSION_HTTP2`, so a miss breaks loudly
   One tarball, ~2 min. `CURL_ROOT` propagates into `CURLConfig.cmake`'s nested
   `find_dependency(NGHTTP2)`, so no extra CMake wiring. **grpc++ fallback not needed.**
   Local image `cuda-quantum-devcontainer:qm-http2` has it baked in.
-- **The C++ client's requests are byte-identical to a Python SDK-descriptor client's**
-  for the same inputs (71765 / 4357 / 39 / 60 / 27 bytes, same program digest).
-  Independent validation of `qm_min.proto`'s opaque-`bytes`-for-message substitution.
+- **Five of six C++ requests are byte-identical to a Python SDK-descriptor client's**
+  (`GetVersion`, `Compile` 4357, `AddCompiledToQueue` 39, `PushToInputStream` 60,
+  `GetNamedResults` 27). `OpenQuantumMachine` (71765) is the same **length** but not
+  byte-identical — the SDK re-serializes the parsed `QuaConfig` and map ordering
+  moves; parsed messages compare equal. Shipping the blob verbatim, as C++ does, is
+  the better behavior. Independent validation of the opaque-`bytes` substitution.
 
 **Two gaps that still matter:**
 
@@ -205,9 +208,14 @@ The spike hard-fails on `features & CURL_VERSION_HTTP2`, so a miss breaks loudly
   `GetJobNamedResultHeader`, which is **not** among the six RPCs in `qm_min.proto`.
   "Length-`creg.size` int buffer per shot" is right about content, but the width is
   defaulted to 4-byte LE (QUA `int` is 32-bit) and exposed as a constructor arg.
-  **P3 decision: add `GetJobNamedResultHeader` as a seventh RPC, or accept the
-  assumption and confirm at P4 against real data.** This is the one thing in
-  `QuaResults` that could not be verified offline.
+  Confirmed **not closable offline**: `qm/_stream_results/_utils.py::_create_results_array`
+  synthesizes an `.npy` header from out-of-band `header.shape`/`header.d_type` before
+  `numpy.load`. **Three** RPCs carry it, any one of which closes the gap —
+  `GetJobNamedResultHeader`, `GetJobNamedResultsHeaders`, `GetJobResultSchema`
+  (`qm/api/v2/job_result_api.py:89/110/133`).
+  **A free runtime cross-check exists and is unused:** `DataSummary.count` is the
+  item count and must equal `totalShotsDecoded()`. One assert catches a wrong element
+  width on the first real fetch at P4. Add it.
 - **Bitstring ordering is a trap.** LSB-first packing is right, but the reference
   Python then formats via `bin(n).zfill(size)` — **MSB-first**, the Qiskit
   convention. CUDA-Q's `sample_result` strings are **qubit-0-first**
@@ -216,6 +224,50 @@ The spike hard-fails on `features & CURL_VERSION_HTTP2`, so a miss breaks loudly
 - `GetNamedResults` has a **chunk/summary envelope** not previously recorded:
   `DataChunk` frames accumulate per output name, a terminating `DataSummary` carries
   the count, and **chunk boundaries do not align to shot boundaries.**
+
+### P2 verifier findings — P3 work items
+
+- **A new TCP connection and HTTP/2 handshake on EVERY RPC.** `GrpcChannel::perform`
+  does `curl_easy_init()` … `curl_easy_cleanup()` per call — no share handle, no
+  multi handle, no persistent easy handle. So every COBYLA step's
+  `PushToInputStream` pays a fresh connect, **which is exactly the per-iteration
+  cost this entire design exists to remove.** P3 must hold one `CURL*` (or a
+  `CURLSH`) per channel. Highest-priority P3 item.
+- **`GetNamedResults` is sent with no `range`.** The SDK *always* sends one
+  (`job_result_api.py:47-64`). Combined with the next item, this is the most likely
+  P4 hang: unknown whether the QOP streams-and-closes or blocks on an unbounded
+  request against a live job. `Range`/`Int64Value` is already wire-validated by
+  `check_qm_min_wire.py` — just never exercised from C++.
+- **Streaming has no default timeout** — `streamTimeoutSeconds = 0` is infinite.
+  A `GetNamedResults` that never terminates hangs forever.
+- **No demux by `output_name`.** The SDK's `_group_results` accumulates per output
+  name and flushes on that name's `DataSummary`; the mock only ever serves
+  `outputs[0]`, so interleaving is untested and `p2_checks` funnels every
+  `data_chunk` into one decoder. Fine with one creg, **wrong with two**.
+  (Same read confirms the legacy `success.data` field is dead on QOP 3.6.2, so the
+  C++ handling is right.)
+- **The mock-path decode is decoration, not an assertion.** Run with a mismatched
+  register it printed `decoded 6 shots, summary count 4` and still exited 0. Gate 3
+  rests entirely on the offline asserts. `assert(totalShotsDecoded() == summaryCount)`
+  fixes this *and* doubles as the element-width guard above.
+- **The incremental-delivery threshold is weak even though the result is solid.**
+  `span < 0.5 * delay * (frames-1)` catches total buffering but would pass an
+  implementation delivering frame 1 promptly and the rest at stream end. Assert
+  per-gap, not on the span.
+- `GrpcFrameReader` trusts the 4-byte length prefix with **no sanity cap** — a
+  garbled prefix buffers up to 4 GiB.
+- `run_p2_checks.sh` appends `"$@"` after its own `--endpoint` and `option()` takes
+  the first match, so a caller-supplied `--endpoint` is **silently ignored**.
+- Instrument-address footguns left in P0/P1 files: `grpc_curl_spike.cpp:96`
+  (`argv[1]` fallback) and `check_goldens.py:93` (`QOP_HOST`, only with `--compile`).
+  Neither is reachable from P2.
+- `GrpcCurl`/`QuaResults` are **not in CMakeLists.txt** — they build only via the
+  ad-hoc script, so no CI, no license-header hook, no `-Werror`. P3 line item.
+
+**Incremental delivery, proven hard (verifier's own probes):** 49 frames @ 20ms all
+individual; 91 frames @ 5ms, 0 gaps < 0.2ms; 91 frames @ 1ms, 0 coalescing; a single
+160,018-byte message arrived across **20 write-callback invocations** and was
+reassembled into exactly one frame, `truncated=0`.
 
 ### P1 verifier findings — act on these in P2/P3
 
