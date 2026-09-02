@@ -49,7 +49,7 @@ No YAML change, no QPU subclass.
 | Parameter transport | `JobService/PushToInputStream` (unary gRPC). Same compile-once model as the OPNIC path, minus the NIC. |
 | Transport lib | protobuf-lite + libcurl HTTP/2 prior-knowledge. **No grpc++.** `cpr`/libcurl already vendored. |
 | QuaConfig | Opaque pre-serialized blob from the QuAM state. Never built in C++. |
-| QuAM state | `~/as_ntu_ncku/as-qpu-5q4c/` (`$QUAM_STATE_PATH`), q1..q5 + 4 couplers. |
+| QuAM state | `~/as_ntu_ncku/as-qpu-10q9c/` (`$QUAM_STATE_PATH`), q1..q10 defined, **active q3..q10**. |
 | QOP host | `10.21.19.201:9514`, cluster `QPX1000_4`, QOP 3.6.2 (gateway 3.6.0-13160.a7d6ed8), `qm.grpc.v2.*`. 1 GbE. |
 | Milestone | Bell pair end to end, then QAOA. |
 
@@ -94,7 +94,7 @@ No YAML change, no QPU subclass.
   PullSamples}` — server-streaming.
 - `qm.simulate()` is server-side (`SimulationApi(BaseApi[FrontendStub])`,
   `qm/api/simulation_api.py:101`). Even simulator work needs the QOP host.
-- **Connection coordinates live in `~/as_ntu_ncku/as-qpu-5q4c/wiring.json`**, in a
+- **Connection coordinates live in `~/as_ntu_ncku/as-qpu-10q9c/wiring.json`**, in a
   `network` block: host `10.21.19.201`, **port 9514**, cluster `QPX1000_4`.
   `state.json` has no `network` section and `load_user_config()` is all-None, but
   `wiring.json` does — read host/port/cluster from there.
@@ -350,12 +350,18 @@ reassembled into exactly one frame, `truncated=0`.
 - `experiments-ethernet/qaoa_with_opt.py` is the slow variant — rebuilds and
   resubmits the whole program per COBYLA step. That is the cost we are removing.
 
-### QuAM state `as-qpu-5q4c`
-- `~/as_ntu_ncku/as-qpu-5q4c/{state.json,wiring.json}`, `$QUAM_STATE_PATH`.
+### QuAM state `as-qpu-10q9c` (switched from `as-qpu-5q4c` on 2026-09-02)
+- `~/as_ntu_ncku/as-qpu-10q9c/{state.json,wiring.json}`, `$QUAM_STATE_PATH`.
   Root class `quam_libs.components.quam_root.FEMQuAM` (OPX1000, LF-FEM + MW-FEM).
-- q1..q5, pairs `coupler_q1_q2 … coupler_q4_q5` — a 5-qubit chain, so the
-  coupling map is linear. Transpilation must route to it.
-- Refreshed by `~/as_ntu_ncku/fetch_5q_state.sh` from the `asqum/qua-libs` fork.
+- `state.json` defines q1..q10 and couplers `coupler_q1_q2 … coupler_q9_q10`, but
+  `active_qubit_names` is **q3..q10** and `active_qubit_pair_names` is
+  **`coupler_q3_q4 … coupler_q7_q8`** — 5 usable pairs. `qua_build.py` indexes
+  `machine.active_qubits`, so logical qubit 0 is **q3**, and only logical 0–5 can
+  take a two-qubit gate. Linear chain; transpilation must route to it.
+- Network block is unchanged from 5q4c: `10.21.19.201:9514`, cluster `QPX1000_4`.
+- `qua_config.pb` is 196325 bytes here (larger than the 5q4c one).
+- Refreshed by `~/as_ntu_ncku/fetch_10q_state.sh` (plus `patch_10q_state.py`) from
+  the `asqum/qua-libs` fork. **Do not use `as-qpu-5q4c` any more.**
 
 ## Layout
 
@@ -398,8 +404,30 @@ frames incrementally, or buffer the response to completion?* — is a question a
 **libcurl**, not the QOP. A mock emitting N frames with delays answers it fully.
 Hardware would answer it no better.
 
-Keep the endpoint configurable so the same tests run against the mock and, when the
-instrument frees up, against the real QOP unchanged.
+Keep the endpoint configurable so the same tests run against the mock and against
+the real QOP unchanged.
+
+## Re-verification on `as-qpu-10q9c`, 2026-09-02
+
+The instrument came back and the chip changed (5q4c → 10q9c). Everything was
+regenerated from the new QuAM state and re-run; all of P0/P1/P2 passes, and the
+deferred P2 part 1 was closed against live hardware.
+
+| Check | How | Result |
+|---|---|---|
+| goldens rebuilt | `tests/regen_goldens.sh` (now defaults to `as-qpu-10q9c`) | 5/5 + `qua_config.pb` 196325 B |
+| P0 wire compat | `protoc --descriptor_set_out=qm_min.desc --include_imports qm_min.proto` in the devcontainer, then `tests/check_qm_min_wire.py qm_min.desc` | 11/11 byte-identical, 0 failures |
+| P1 offline | `tests/check_goldens.py` | 5/5 parse, angle counts and cregs as manifested |
+| P1 live | `tests/check_goldens.py --compile` | 5/5 compiled on QOP 3.6.2, program_ids returned |
+| P2 mock | `tests/run_p2_checks.sh` | all 8 checks; frames arrive incrementally (1.20 s span vs 1.2 s server spacing) |
+| P2 live (was deferred) | `p2_checks --endpoint 10.21.19.201:9514 --cluster QPX1000_4 --config … --program …`, no `--mock` | GetVersion + OpenQuantumMachine + Compile all ok over libcurl 8.21.0 / nghttp2 1.64.0 |
+
+`protoc` is not on the host and the venv has no `grpc_tools`, so `qm_min.desc` has
+to be generated inside `cuda-quantum-devcontainer:qm-http2`. The generated
+`qm_min.desc` is a build artifact, not checked in.
+
+Both live runs leave a quantum machine open on the QOP; they were closed
+afterwards via `qmm.list_open_quantum_machines()`. **P3 must close its QM.**
 
 ## Phases
 
@@ -440,7 +468,7 @@ verifier reports, it does not fix; failures come back for re-dispatch.
 - **Gate:** each golden reloads via `QuaProgram.FromString`, and `qm.compile()`
   against the live QOP accepts it.
 
-### P2 — gRPC client — **PASSED** on parts 2 and 3; part 1 deferred
+### P2 — gRPC client — **PASSED** on all three parts
 - [ ] **Rebuild `/usr/local/curl` with nghttp2.** `USE_NGHTTP2=ON` is already
       flipped at `install_prerequisites.sh:539`, but the flag is inert unless
       nghttp2 is present at configure time. Confirm with a runtime probe that
@@ -461,9 +489,11 @@ verifier reports, it does not fix; failures come back for re-dispatch.
       shot, bit `i` = clbit `i`, LSB-first. Count `shots` buffers per push to
       segment iterations; there is no delimiter in the stream.
 - **Gate (achievable without the instrument):**
-  1. A C++ binary does `OpenQuantumMachine(qua_config.pb)` + `Compile(bell.golden.pb)`
-     against the **live QOP** and gets a program_id. Non-disruptive — P1 did
-     exactly this from Python. **Do not call `AddCompiledToQueue`.**
+  1. [x] A C++ binary does `OpenQuantumMachine(qua_config.pb)` +
+     `Compile(bell.golden.pb)` against the **live QOP** and gets a program_id.
+     Ran 2026-09-02: gateway `3.6.0-13160.a7d6ed8`, program_id
+     `ad11d8ae-…`. **Do not call `AddCompiledToQueue`.** Note `p2_checks` leaves
+     the QM open — P3 must close it.
   2. Against the mock, `GetNamedResults` returning 3 frames with delays is read
      **incrementally** — prove libcurl does not buffer to completion. This is the
      last unproven transport assumption, and hardware would not answer it better.
@@ -502,7 +532,7 @@ verifier reports, it does not fix; failures come back for re-dispatch.
 ## Constraints for agents
 
 - **Never write outside** `/home/asrlabncku/as_ntu_ncku/experiments/cuda-quantum`.
-  `~/as_ntu_ncku/{qua-libs,as-qpu-5q4c,experiments-ethernet,experiments/opnic_dgx_opx}`
+  `~/as_ntu_ncku/{qua-libs,as-qpu-10q9c,experiments-ethernet,experiments/opnic_dgx_opx}`
   and the venv are **read-only references**.
 - Use `/home/asrlabncku/as_ntu_ncku/.venv/bin/python` for anything importing
   `qm`/`qiskit`/`quam`. System python3 has a broken numpy.
