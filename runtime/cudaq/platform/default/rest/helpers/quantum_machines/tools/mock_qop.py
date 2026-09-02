@@ -6,7 +6,7 @@
 # This source code and the accompanying materials are made available under     #
 # the terms of the Apache License 2.0 which accompanies this distribution.     #
 # ============================================================================ #
-"""A mock QOP gateway speaking the six RPCs the CUDA-Q executor calls.
+"""A mock QOP gateway speaking the seven RPCs the CUDA-Q executor calls.
 
 Built on the qm SDK's own descriptors, so a request the mock accepts is a
 request the real QOP would parse. Every call is appended to a JSON-lines RPC
@@ -118,6 +118,15 @@ class MockQOP:
         resp.success.job_id = job_id
         return resp.SerializeToString()
 
+    def close(self, payload, context):
+        req = qm_api_pb2.QmServiceCloseRequest.FromString(payload)
+        self.record(f"{QM}/Close",
+                    payload,
+                    quantum_machine_id=req.quantum_machine_id)
+        resp = qm_api_pb2.QmServiceCloseResponse()
+        resp.success.SetInParent()
+        return resp.SerializeToString()
+
     def push_to_input_stream(self, payload, context):
         req = job_api_pb2.JobServicePushToInputStreamRequest.FromString(payload)
         kind = req.WhichOneof("stream_data_oneof")
@@ -141,6 +150,9 @@ class MockQOP:
                     payload,
                     job_id=req.job_id,
                     outputs=names,
+                    ranges=[[getattr(o.range, "from").value, o.range.to.value]
+                            if o.HasField("range") else None
+                            for o in req.outputs],
                     frames=len(chunks) + 1,
                     buffers=len(self.args.results))
 
@@ -190,6 +202,8 @@ class MockQOP:
                 unary(self.compile, *ident),
             f"{QM}/AddCompiledToQueue":
                 unary(self.add_compiled_to_queue, *ident),
+            f"{QM}/Close":
+                unary(self.close, *ident),
             f"{JOB}/PushToInputStream":
                 unary(self.push_to_input_stream, *ident),
             f"{JOB}/GetNamedResults":
@@ -244,7 +258,10 @@ def main():
     args.results = [_bitstring(s) for s in strings]
 
     mock = MockQOP(args)
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=8))
+    # Without this grpc sets SO_REUSEPORT, so a stale mock on the same port
+    # silently shares it and half the RPCs never reach the log a test asserts on.
+    server = grpc.server(futures.ThreadPoolExecutor(max_workers=8),
+                         options=[("grpc.so_reuseport", 0)])
     server.add_generic_rpc_handlers((_Router(mock.handlers()),))
     if server.add_insecure_port(args.listen) == 0:
         raise SystemExit(f"could not bind {args.listen}")

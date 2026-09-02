@@ -39,4 +39,24 @@ target-arguments:
     type: string
     platform-arg: api_key
     help-string: "An API key to access the Qoperator server"
+  - key: qm-config
+    required: false
+    type: string
+    platform-arg: qm_config
+    help-string: "Path to the serialized QuaConfig (qua_config.pb) for the chip. Also settable at run time as `--qm-config <path>` or $CUDAQ_QM_CONFIG."
+  - key: qm-endpoint
+    required: false
+    type: string
+    platform-arg: qm_endpoint
+    help-string: "QOP gRPC endpoint as host:port, e.g. 10.21.19.201:9514. Run-time equivalent: `--qm-endpoint`."
+  - key: qm-cluster
+    required: false
+    type: string
+    platform-arg: qm_cluster
+    help-string: "QOP cluster name the gateway routes by. Run-time equivalent: `--qm-cluster`."
+  - key: qm-builder
+    required: false
+    type: string
+    platform-arg: qm_builder
+    help-string: "Path to tools/qua_build.py, run once per circuit structure. Run-time equivalent: `--qm-builder`."
   

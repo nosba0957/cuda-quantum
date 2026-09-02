@@ -15,8 +15,11 @@
 #include <cstdint>
 #include <functional>
 #include <map>
+#include <mutex>
 #include <string>
 #include <string_view>
+
+struct curl_slist;
 
 namespace cudaq::qm {
 
@@ -29,6 +32,9 @@ struct GrpcResult {
   int status = -1;
   std::string message;
   std::string transportError;
+  /// TCP connections libcurl had to open for this call. Zero after the first
+  /// call on a channel; anything else means the connection was not reused.
+  long newConnections = 0;
 
   bool ok() const { return transportError.empty() && status == 0; }
   std::string describe() const;
@@ -40,6 +46,9 @@ using GrpcFrameHandler = std::function<void(std::string_view)>;
 /// handler as soon as each one is complete. Bytes may arrive in any chunking.
 class GrpcFrameReader {
 public:
+  explicit GrpcFrameReader(std::uint32_t maxFrameBytes = 64u * 1024 * 1024)
+      : limit(maxFrameBytes) {}
+
   void feed(std::string_view bytes, const GrpcFrameHandler &onFrame);
 
   /// True if trailing bytes remain that do not form a whole frame.
@@ -47,6 +56,7 @@ public:
   const std::string &error() const { return failure; }
 
 private:
+  std::uint32_t limit;
   std::string buffer;
   std::string failure;
 };
@@ -58,6 +68,9 @@ public:
   /// @param endpoint "host:port"; @param clusterName sent as the `cluster_name`
   /// header the QOP gateway uses to route, omitted when empty.
   explicit GrpcChannel(std::string endpoint, std::string clusterName = "");
+  ~GrpcChannel();
+  GrpcChannel(const GrpcChannel &) = delete;
+  GrpcChannel &operator=(const GrpcChannel &) = delete;
 
   const std::string &endpoint() const { return address; }
   void setTimeout(long seconds) { timeoutSeconds = seconds; }
@@ -83,8 +96,15 @@ private:
   std::string address;
   std::string cluster;
   long timeoutSeconds = 30;
-  long streamTimeoutSeconds = 0;
+  long streamTimeoutSeconds = 300;
   bool verbose = false;
+
+  // One easy handle per channel, reused across calls so that the HTTP/2
+  // connection survives; it is not thread-safe, so every call serializes on
+  // callMutex.
+  std::mutex callMutex;
+  void *handle = nullptr; // CURL*, kept opaque so curl.h stays out of here
+  curl_slist *fixedHeaders = nullptr;
 };
 
 } // namespace cudaq::qm

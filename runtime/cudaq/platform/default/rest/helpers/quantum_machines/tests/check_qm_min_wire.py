@@ -127,14 +127,25 @@ def main(argv):
             AddCompiledToQueueResponseSuccess(job_id="job-99")),
         Min("AddCompiledToQueueResponse"), {"success.job_id": "job-99"})
 
+    check("QmServiceCloseRequest",
+          qm_api_pb2.QmServiceCloseRequest(quantum_machine_id="qm-7"),
+          Min("QmServiceCloseRequest"), {"quantum_machine_id": "qm-7"})
+
+    check(
+        "QmServiceCloseResponse",
+        qm_api_pb2.QmServiceCloseResponse(
+            success=qm_api_pb2.
+            QmServiceCloseResponse.QmServiceCloseResponseSuccess()),
+        Min("QmServiceCloseResponse"), {"HasField('success')": True})
+
     check(
         "PushToInputStream(fixed)",
         job_api_pb2.JobServicePushToInputStreamRequest(
             job_id="job-99",
             stream_name="input_stream_gamma",
             fixed_stream_data=job_manager_pb2.FixedStreamData(
-                data=[0.5, -0.25])),
-        Min("JobServicePushToInputStreamRequest"), {
+                data=[0.5, -0.25])), Min("JobServicePushToInputStreamRequest"),
+        {
             "job_id": "job-99",
             "stream_name": "input_stream_gamma",
             "fixed_stream_data.data[:]": [0.5, -0.25]
@@ -154,17 +165,17 @@ def main(argv):
         outputs=[
             job_api_pb2.GetNamedResultsRequest.Output(
                 output_name="c",
-                range=common_types_pb2.Range(
-                    **{
-                        "from": Int64Value(value=0),
-                        "to": Int64Value(value=999)
-                    }))
+                range=common_types_pb2.Range(**{
+                    "from": Int64Value(value=0),
+                    "to": Int64Value(value=999)
+                }))
         ])
-    check("GetNamedResultsRequest", req, Min("GetNamedResultsRequest"), {
-        "job_id": "job-99",
-        "outputs[0].output_name": "c",
-        "outputs[0].range.to.value": 999
-    })
+    check(
+        "GetNamedResultsRequest", req, Min("GetNamedResultsRequest"), {
+            "job_id": "job-99",
+            "outputs[0].output_name": "c",
+            "outputs[0].range.to.value": 999
+        })
     m = Min("GetNamedResultsRequest")()
     m.MergeFromString(req.SerializeToString())
     if getattr(m.outputs[0].range, "from").value != 0:
@@ -174,9 +185,8 @@ def main(argv):
         "GetNamedResultResponse",
         job_api_pb2.GetNamedResultResponse(
             success=job_api_pb2.GetNamedResultResponse.
-            GetNamedResultResponseSuccess(count_of_items=2,
-                                          output_name="c",
-                                          data=b"\x01\x00\x01\x01")),
+            GetNamedResultResponseSuccess(
+                count_of_items=2, output_name="c", data=b"\x01\x00\x01\x01")),
         Min("GetNamedResultResponse"), {
             "success.count_of_items": 2,
             "success.output_name": "c",
