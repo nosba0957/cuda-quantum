@@ -28,7 +28,7 @@ protected:
 
   /// @brief The ServerHelper, providing system-specific JSON-formatted
   /// job posts and results translation
-  ServerHelper *serverHelper;
+  ServerHelper *serverHelper = nullptr;
 
   /// @brief The number of shots to execute
   std::size_t shots = 100;

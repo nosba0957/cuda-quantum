@@ -23,7 +23,8 @@ py="${PY:-/home/asrlabncku/as_ntu_ncku/.venv/bin/python}"
 port="${MOCK_PORT:-9515}"
 delay="${STREAM_DELAY:-0.4}"
 work="$(mktemp -d)"
-trap 'rm -rf "$work"; [ -n "${mock_pid:-}" ] && kill "$mock_pid" 2>/dev/null' EXIT
+cleanup() { [ -n "${mock_pid:-}" ] && kill "$mock_pid" 2>/dev/null; rm -rf "$work" 2>/dev/null; return 0; }
+trap cleanup EXIT
 
 "$py" "$qmdir/tools/mock_qop.py" --listen "127.0.0.1:$port" \
   --log "$work/rpc.jsonl" --ready-file "$work/ready" \

@@ -6,7 +6,7 @@
 // the terms of the Apache License 2.0 which accompanies this distribution.   //
 // ========================================================================== //
 
-// Minimal subset of the Quantum Machines QOP 3.x gRPC API: the six RPCs the
+// Minimal subset of the Quantum Machines QOP 3.x gRPC API: the seven RPCs the
 // CUDA-Q quantum_machines executor calls. Field numbers, message names, package
 // and service names must match the real descriptors exactly -- regenerate
 // tools/proto_dump/ with tools/dump_protos.py and diff before changing any.
@@ -173,10 +173,28 @@ message AddCompiledToQueueResponse {
   }
 }
 
+message QmServiceCloseRequest {
+  string quantum_machine_id = 1;
+}
+
+message QmServiceCloseResponse {
+  message QmServiceCloseResponseSuccess {}
+
+  message QmServiceCloseResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    QmServiceCloseResponseSuccess success = 1;
+    QmServiceCloseResponseError error = 2;
+  }
+}
+
 service QmService {
   rpc Compile(QmServiceCompileRequest) returns (CompileResponse);
   rpc AddCompiledToQueue(QmServiceAddCompiledToQueueRequest)
       returns (AddCompiledToQueueResponse);
+  rpc Close(QmServiceCloseRequest) returns (QmServiceCloseResponse);
 }
 
 message JobServicePushToInputStreamRequest {

@@ -114,6 +114,12 @@ void GrpcFrameReader::feed(std::string_view bytes,
                                  (static_cast<std::uint32_t>(p[2]) << 16) |
                                  (static_cast<std::uint32_t>(p[3]) << 8) |
                                  static_cast<std::uint32_t>(p[4]);
+    if (length > limit) {
+      failure = "gRPC frame length " + std::to_string(length) +
+                " exceeds the " + std::to_string(limit) + " byte cap";
+      buffer.clear();
+      return;
+    }
     if (buffer.size() - offset - 5 < length)
       break;
     onFrame(std::string_view(buffer.data() + offset + 5, length));
@@ -125,6 +131,23 @@ void GrpcFrameReader::feed(std::string_view bytes,
 GrpcChannel::GrpcChannel(std::string endpoint, std::string clusterName)
     : address(std::move(endpoint)), cluster(std::move(clusterName)) {
   globalInit();
+  handle = curl_easy_init();
+  fixedHeaders =
+      curl_slist_append(nullptr, "content-type: application/grpc+proto");
+  fixedHeaders = curl_slist_append(fixedHeaders, "te: trailers");
+  fixedHeaders = curl_slist_append(fixedHeaders, "x-grpc-service: gateway");
+  fixedHeaders =
+      curl_slist_append(fixedHeaders, "user-agent: cudaq-quantum-machines/0.1");
+  fixedHeaders = curl_slist_append(fixedHeaders, "Expect:");
+  if (!cluster.empty())
+    fixedHeaders =
+        curl_slist_append(fixedHeaders, ("cluster_name: " + cluster).c_str());
+}
+
+GrpcChannel::~GrpcChannel() {
+  if (handle)
+    curl_easy_cleanup(static_cast<CURL *>(handle));
+  curl_slist_free_all(fixedHeaders);
 }
 
 bool GrpcChannel::http2Available() {
@@ -149,35 +172,29 @@ GrpcResult GrpcChannel::perform(std::string_view method,
     return result;
   }
 
-  const std::string url = "http://" + address + std::string(method);
-  const std::string body = encodeFrame(request);
-
-  CURL *curl = curl_easy_init();
+  std::lock_guard<std::mutex> guard(callMutex);
+  CURL *curl = static_cast<CURL *>(handle);
   if (!curl) {
     result.transportError = "curl_easy_init failed";
     return result;
   }
 
+  const std::string url = "http://" + address + std::string(method);
+  const std::string body = encodeFrame(request);
+
   CallState state;
   state.onFrame = &onFrame;
 
-  curl_slist *headers = nullptr;
-  headers = curl_slist_append(headers, "content-type: application/grpc+proto");
-  headers = curl_slist_append(headers, "te: trailers");
-  headers = curl_slist_append(headers, "x-grpc-service: gateway");
-  headers =
-      curl_slist_append(headers, "user-agent: cudaq-quantum-machines/0.1");
-  headers = curl_slist_append(headers, "Expect:");
-  if (!cluster.empty())
-    headers = curl_slist_append(headers, ("cluster_name: " + cluster).c_str());
-
+  // Resetting clears per-call options but explicitly preserves the handle's
+  // live connections and DNS cache, which is the whole point of keeping it.
+  curl_easy_reset(curl);
   curl_easy_setopt(curl, CURLOPT_URL, url.c_str());
   curl_easy_setopt(curl, CURLOPT_HTTP_VERSION,
                    CURL_HTTP_VERSION_2_PRIOR_KNOWLEDGE);
   curl_easy_setopt(curl, CURLOPT_POST, 1L);
   curl_easy_setopt(curl, CURLOPT_POSTFIELDS, body.data());
   curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(body.size()));
-  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, fixedHeaders);
   curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, onBody);
   curl_easy_setopt(curl, CURLOPT_WRITEDATA, &state);
   curl_easy_setopt(curl, CURLOPT_HEADERFUNCTION, onHeader);
@@ -189,8 +206,7 @@ GrpcResult GrpcChannel::perform(std::string_view method,
 
   const CURLcode rc = curl_easy_perform(curl);
   curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &result.httpStatus);
-  curl_slist_free_all(headers);
-  curl_easy_cleanup(curl);
+  curl_easy_getinfo(curl, CURLINFO_NUM_CONNECTS, &result.newConnections);
 
   if (rc != CURLE_OK) {
     result.transportError = curl_easy_strerror(rc);

@@ -367,7 +367,7 @@ reassembled into exactly one frame, `truncated=0`.
 
 ```
 runtime/cudaq/platform/default/rest/helpers/quantum_machines/
-  QMExecutor.cpp          # Executor override, structure cache, gRPC calls
+  QMExecutor.cpp/.h       # Executor override, structure cache, gRPC calls
   GrpcCurl.cpp/.h         # unary + server-stream gRPC over libcurl h2c
   QuaResults.cpp/.h       # GetNamedResults buffers -> cudaq::sample_result
   qm_min.proto            # hand-cut subset: qm_api + qmm_api + job_api
@@ -375,8 +375,12 @@ runtime/cudaq/platform/default/rest/helpers/quantum_machines/
     dump_protos.py        # descriptor pool -> .proto text (one-shot reference)
     quam2pb.py            # QuAM state -> qua_config.pb
     qua_build.py          # QASM2 -> parametric QuaProgram bytes (subprocess entry)
+    mock_qop.py           # grpcio mock QOP on the real descriptors, with an RPC log
   tests/corpus/*.qasm     # bell, rz sweep, sx chain, cz pair, qaoa p=1
   tests/corpus/*.golden.pb
+  tests/p2_checks.cpp     # transport + decoder, run by run_p2_checks.sh
+  tests/p3_checks.cpp     # executor + the P3 gate, run by run_p3_checks.sh
+  tests/stub_qua_build.py # qua_build.py stand-in for the devcontainer
 ```
 
 ## Working without the instrument
@@ -446,16 +450,11 @@ verifier reports, it does not fix; failures come back for re-dispatch.
   warning-free; links against `-lprotobuf-lite` alone with zero undefined
   `Descriptor`/`Reflection` symbols; live `GetVersion` returns the version string.
 
-**Two P0 defects to fix before P3:**
-- [ ] `QmServiceCompileRequest.high_level_program` (#2) and
-      `OpenQuantumMachineRequest.config` (#1) are message-typed upstream
-      (explicit presence) but plain `bytes` in `qm_min` (implicit presence). An
-      **empty** value encodes differently — server sees "absent" where the SDK
-      sends "present, zero-length". Non-empty values are identical, so the
-      practical risk is near zero, but make them `optional bytes` for
-      consistency (`QmServiceCompileRequest.config` #3 already is).
-- [ ] `tests/run_spike.sh:18` interpolates `$*` unquoted into a `bash -lc`
-      string. Cosmetic.
+**Two P0 defects, both closed (re-checked 2026-09-02):**
+- [x] `QmServiceCompileRequest.high_level_program` (#2) and
+      `OpenQuantumMachineRequest.config` (#1) are now `optional bytes`, matching
+      the explicit presence the message-typed upstream fields have.
+- [x] `tests/run_spike.sh` passes `"$@"` rather than an unquoted `$*`.
 
 ### P1 — Python side
 - [ ] `quam2pb.py`: load QuAM from `$QUAM_STATE_PATH` → `machine.generate_config()`
@@ -500,16 +499,133 @@ verifier reports, it does not fix; failures come back for re-dispatch.
   3. `QuaResults` decodes synthetic buffers to the expected counts.
 - **Deferred to instrument time:** submitting a job and reading real counts.
 
-### P3 — QMExecutor
-- [ ] `QMExecutor : cudaq::Executor`, override `execute()`, register it.
-- [ ] Structural hash of QASM2 with rotation angles blanked → program cache.
-- [ ] Miss → `qua_build.py` subprocess + `Compile` + `AddCompiledToQueue`.
+### P3 — QMExecutor — **PASSED** (verified independently 2026-09-02)
+- [x] `QMExecutor : cudaq::Executor`, override `execute()`, register it.
+- [x] Structural key: QASM2 with rotation angles blanked, plus shots,
+      iterations, optimization level, reset type/attempts and a QuAM
+      fingerprint. Kept whole rather than hashed — no collision risk.
+- [x] Miss → `qua_build.py` subprocess + `Compile` + `AddCompiledToQueue`.
       Hit → `PushToInputStream`.
-- [ ] Iterate all of `codesToExecute` (see the `createJob` bug above).
-- [ ] CMake: protobuf-lite; target arg for the `qua_config.pb` path.
-- **Gate:** two `cudaq::sample` calls differing only in rotation angles produce
-  **one** `Compile` RPC and **two** `PushToInputStream` RPCs. Assert on the RPC
-  log, not on timing.
+- [x] Iterate all of `codesToExecute` (see the `createJob` bug above).
+- [x] CMake: protobuf-lite + generated `qm_min.pb.cc` in an OBJECT library,
+      linked into `cudaq-rest-qpu` and the serverhelper `.so`; `qm-config`,
+      `qm-endpoint`, `qm-cluster`, `qm-builder` target arguments.
+- **Gate: PASSED.** `tests/run_p3_checks.sh`: two executes differing only in
+  angles gave **1 Compile, 2 PushToInputStream**, asserted on the mock's log.
+
+### Found in P3 (verified by running, 2026-09-02)
+
+- **`cudaq::Executor::serverHelper` was uninitialized** (`Executor.h`), and
+  every caller happened to `setServerHelper` before use. Reading it first
+  segfaults — it did, at -O1, holding a pointer spelled `"--live"`. Fixed with
+  an NSDMI; `QMExecutor` also nulls it in its own constructor, because the base
+  constructor lives in a prebuilt `libcudaq-common`.
+- **`GrpcChannel` now holds one `CURL*` per channel**, reset per call
+  (`curl_easy_reset` preserves the connection cache) and serialized on a mutex:
+  concurrent calls on one channel are safe, they just do not overlap.
+  `CURLINFO_NUM_CONNECTS` is surfaced as `GrpcResult::newConnections` and
+  asserted — 1 connect for 5 RPCs, against both the mock and the live QOP.
+- **A stale `build/` exports an HTTP/2-less libcurl.** `libcudaq-common.so`
+  statically links curl and exports its 95 symbols, so anything linked after it
+  binds to that copy and every RPC fails with "built without HTTP/2". A rebuilt
+  `libcudaq-common.so` carries 415 nghttp2 symbols and the problem disappears;
+  ad-hoc link lines must still put the curl static libs first.
+- **`mock_qop.py` bound with `SO_REUSEPORT`** (the grpc default), so a stale
+  mock on the same port silently split the RPC log between two servers and the
+  gate assertions read half the traffic. Disabled.
+  `run_p2_checks.sh`'s `EXIT` trap also ran `rm` before `kill`, so a failing
+  `rm` leaked the mock; both scripts now kill first.
+- **`GetNamedResults` is sent with a range** (`[consumed, consumed+shots-1]`,
+  inclusive), demultiplexed by `output_name`, with `DataSummary.count` asserted
+  against the decoded item count — the free element-width guard P2 flagged.
+- `QmService/Close` added as the seventh RPC in `qm_min.proto`, wire-checked
+  (13/13) and exercised live: `QM-5ba15d02-…` opened and released, with
+  `list_open_qms()` confirming nothing left behind.
+- **`qua_build.py` cannot run in the devcontainer** (no qiskit/quam/venv there),
+  so `tests/run_p3_checks.sh` points the executor at `tests/stub_qua_build.py`.
+  Sound for the gate itself — the cache key is computed entirely in C++ from the
+  QASM (`structuralKey`, `QMExecutor.cpp:376-383`) and the builder never
+  participates — but see the verifier's S2 below on what it does *not* cover.
+
+### P3 verifier findings, 2026-09-02 — gate met, 8/10 CONFIRMED, 2 PARTIAL
+
+Fix S1, S2 and S6 before P4; P4 is the first phase that deliberately plays
+pulses, and S6 is what stops a stray flag from doing it early.
+
+- [ ] **S1 — `expect()` calls `std::exit(1)`, which skips destructors**
+      (`tests/p3_checks.cpp:103-108`). In `checkLive` (346-368) the executor is
+      opened at 347 and closed at 366; any failing assertion between them leaks
+      the quantum machine and the `~QMExecutor` safety net never fires. The
+      verifier found `QM-a5fab0ca-…` still open on the QOP, contradicting the
+      "nothing left behind" claim above; the orchestrator closed it, and a
+      second leak (`QM-449f9c6e-…`) after the verifier's own run. The destructor
+      itself is fine — `std::exit` is the bug. Return a failure code instead.
+- [ ] **S2 — the offline manifest coverage is weaker than claimed.** All five
+      corpus manifests are **identity** mappings with contiguous ordinals and
+      100% slot survival, and `checkAgainstCorpusManifests` compares *values*:
+      `bell`/`cz_pair` have none, `sx_chain`'s four are all `1.570796`,
+      `qaoa_p1`'s nine are `1.4`×4 + `0.6`×5. Only `rz_sweep` genuinely pins
+      ordering, and only for `rz`. `p3_checks`' own `respin()` is degenerate the
+      same way. **The non-identity `angleSlots` path is exercised by nothing in
+      the suite.** The verifier wrote both missing checks and the code passed
+      them — 9 distinct angles across every qasm2-reachable rotation gate agreed
+      with the real `parameterize()`, and a stub emitting `theta_0,2,4,6,8` made
+      the executor push `[0.1,0.3,0.5,0.7,0.9]` — but those tests are not
+      checked in. Add them.
+- [ ] **S6 — `p3_checks` has no `--mock` opt-in.** `p2_checks` required one;
+      `p3_checks` gates on `--rpc-log` being non-empty instead, so
+      `p3_checks --qm-endpoint <real QOP> --rpc-log x` runs `checkGate` →
+      `AddCompiledToQueue` → **plays pulses**. Only the S5 bug accidentally
+      prevents it via the script. The checked-in `--live` path is clean
+      (`AddCompiledToQueue` appears nowhere in `checkLive`).
+- [ ] **S5 — `"$@"` is appended after the script's own flags** in
+      `run_p2_checks.sh:60` and again in `run_p3_checks.sh:73-78`, and both
+      `option()` (`p3_checks.cpp:42-48`) and `lookupSetting`
+      (`QMExecutor.cpp:157-167`) take the **first** match. So
+      `bash run_p3_checks.sh --live --qm-endpoint 10.21.19.201:9514` silently
+      runs against `127.0.0.1:9516`. Carried over unfixed from P2.
+- [ ] **S4 — the CMake integration disappears silently without protobuf.**
+      `find_package(Protobuf QUIET)` → `return()` (`CMakeLists.txt:22-26`)
+      builds **no executor at all**, announced only by a `message(STATUS)`;
+      `qpu_utils.cpp:59` then falls back to the base `Executor` and the
+      multi-term-dropping cloud `createJob`. The project's own
+      `cuda-quantum-devcontainer:qm-http2` has no `libprotobuf-dev` — the test
+      scripts `apt-get` it at run time, so a plain `build_cudaq.sh` there hits
+      exactly this. Make it a loud warning at minimum.
+- [ ] **S7 — the `DataSummary.count` guard may fire spuriously at P4.**
+      `QMExecutor.cpp:695-703` compares against `decoder->pendingShots()` (this
+      fetch) rather than `totalShotsDecoded()`. If the QOP's count is cumulative
+      per output, the second batch throws "the result element width is wrong".
+      Not decidable offline.
+- **S3 — `scanQasm` does not reproduce `parameterize()` for register-broadcast
+  rotations.** `rz(0.111) q;` on `qreg q[3]` gives qiskit `[0.111]×3 + …` and
+  `scanQasm` `[0.111, …]`. Low severity: `TranslateToOpenQASM.cpp:326` emits
+  individual qubit refs (only `mz` takes a veq), so nvq++ cannot produce it, and
+  the `slot >= scan.angles.size()` guard at `QMExecutor.cpp:539` throws rather
+  than misaligning. The `_ROT` sets themselves are byte-identical
+  (`QMExecutor.cpp:41` vs `qua_build.py:19`); `p`, `rzz`, `crx`, `cry` are
+  unreachable because `qasm2.loads` rejects them, harmless as both sides carry
+  them.
+- [x] **S8 — three sources were `root:root`**, written from inside the
+      container. Chowned back.
+
+Confirmed on stronger evidence than the builder offered: the gate counts read
+from the mock's log rather than the script's own assertion (seq 7 `Compile`,
+seq 9 and 11 `PushToInputStream`, ranges `[0,3]` then `[4,7]`); the persistent
+connection (1 connect across 5 RPCs, asserted); `codesToExecute` iteration (a
+two-term observe produced two registers); the `Executor.h` NSDMI (`Executor`
+was already a non-aggregate, and `grep -rn "Executor{"` finds nothing, so brace
+init cannot break); the `--qm-config` precedence (argv > `CUDAQ_QM_*` > backend
+measured across seven configurations, `--flag=value` included). `-Werror` clean,
+`clang-format-22` clean, and P2 / goldens / wire check all still pass.
+
+**One design liability, not a defect:** `--qm-config` is read from
+`/proc/self/cmdline`, which is Linux-only and silently a no-op on macOS. The
+premise is right — CUDA-Q's produced binaries have no ambient argument parser,
+and the only argv consumers in the tree (`cudaq::mpi::initialize`,
+`cudaq::realtime::initialize`) require the user to pass `argc/argv` from their
+own `main`. The env var and the compile-time target argument are the portable
+paths.
 
 ### P4 — Bell end to end
 - [ ] `nvq++ --target quantum_machines bell.cpp && ./a.out --qm-config qua_config.pb`
@@ -545,7 +661,9 @@ verifier reports, it does not fix; failures come back for re-dispatch.
 
 - [x] ~~QOP version on `10.21.19.201`~~ — **QOP 3.6.0, `qm.grpc.v2.*`, port 9514.**
       Resolved in P0 against the live instrument.
-- [x] ~~Is the OPX free for test jobs?~~ **No — not available as of 2026-08-31.**
-      Work is reordered around it: see "Working without the instrument" below.
-- [ ] Ping when the OPX frees up — P4/P5 and the streaming-against-real-data checks
-      are the only things waiting on it.
+- [x] ~~Is the OPX free for test jobs?~~ **Yes again as of 2026-09-02**, on the
+      new chip `as-qpu-10q9c`. It was unavailable 2026-08-31, which is why P2
+      part 1 was deferred; that is now closed. Still be deliberate: every
+      `OpenQuantumMachine` pushes configuration to the controllers, and a job
+      plays pulses.
+- [x] ~~Ping when the OPX frees up~~ — done; P4/P5 are unblocked.
