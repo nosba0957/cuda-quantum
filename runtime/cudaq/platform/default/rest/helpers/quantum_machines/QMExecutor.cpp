@@ -712,8 +712,9 @@ QMExecutor::fetchCounts(QMProgram &program) {
 
 detail::future QMExecutor::execute(std::vector<KernelExecution> &codesToExecute,
                                    detail::ExecutionContextType execType,
-                                   std::vector<char> *rawOutput) {
-  if (execType == detail::ExecutionContextType::run || rawOutput)
+                                   std::vector<char> *) {
+  // rawOutput is ignored, not rejected: the sample path always passes it.
+  if (execType == detail::ExecutionContextType::run)
     throw std::runtime_error(
         "quantum_machines: cudaq::run is not supported by this target");
   if (serverHelper)

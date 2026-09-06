@@ -58,7 +58,7 @@ fi
 if ! command -v protoc > /dev/null; then
   apt-get update -qq && apt-get install -y -qq protobuf-compiler libprotobuf-dev
 fi
-b=$(mktemp -d)
+b=/work
 protoc --cpp_out="$b" qm_min.proto
 g++ -std=c++20 -O1 -Wall -Wextra -Wno-unused-parameter \
     -I"$b" -I. -I/repo/runtime -I/repo/runtime/include -I/repo/cudaq/include \
@@ -70,13 +70,79 @@ g++ -std=c++20 -O1 -Wall -Wextra -Wno-unused-parameter \
     -L/repo/build/lib -lcudaq-common -lcudaq-logger -Wl,-rpath,/repo/build/lib \
     -lprotobuf-lite
 mkdir -p /work/qmtmp
-"$b/p3_checks" --corpus tests/corpus --rpc-log /work/rpc.jsonl \
-    --qm-endpoint "127.0.0.1:$port" --qm-config tests/qua_config.pb \
-    --qm-builder tests/stub_qua_build.py --qm-python python3 \
-    --qm-tmpdir /work/qmtmp "$@"
+common="--corpus tests/corpus --qm-endpoint 127.0.0.1:$port
+        --qm-config tests/qua_config.pb
+        --qm-builder tests/stub_qua_build.py --qm-python python3
+        --qm-tmpdir /work/qmtmp"
+
+# S6: without an explicit --mock, nothing that can queue a job may run.
+echo "### S6: no --mock, must stay offline"
+"$b/p3_checks" $common --rpc-log /work/rpc.jsonl > /work/s6.log 2>&1 \
+  || { echo "FAIL S6: exited non-zero"; cat /work/s6.log; exit 1; }
+if [ -s /work/rpc.jsonl ]; then
+  echo "FAIL S6: RPCs were made without --mock"; cat /work/rpc.jsonl; exit 1
+fi
+grep -q "offline checks only" /work/s6.log \
+  || { echo "FAIL S6: did not stop at the offline checks"; cat /work/s6.log; exit 1; }
+echo "ok   S6: no --mock means no RPCs"
+
+"$b/p3_checks" $common --rpc-log /work/rpc.jsonl --mock "$@"
 rm -rf /work/qmtmp
+chown -R '"$(id -u):$(id -g)"' /work
 ' checks "$port" "$@"
 
 echo
 echo "--- RPC log ---"
 cat "$work/rpc.jsonl"
+
+# S1: an assertion that fails while a quantum machine is open must still
+# release it. The mock returns four identical shots, so "four distinct shots"
+# fails naturally -- no test-only failure injection.
+echo
+echo "### S1: a failing assertion must still release the quantum machine"
+kill "$mock_pid" 2>/dev/null || true
+mock_pid=""
+for _ in $(seq 40); do "$py" -c "
+import socket,sys
+s=socket.socket()
+sys.exit(0 if s.connect_ex(('127.0.0.1',$port)) else 1)" && break; sleep 0.25; done
+
+"$py" "$qmdir/tools/mock_qop.py" --listen "127.0.0.1:$port" \
+  --log "$work/rpc-s1.jsonl" --ready-file "$work/ready-s1" \
+  --stream-frames 3 --stream-delay 0 --creg-name var6 \
+  --results 00000,00000,00000,00000 > "$work/mock-s1.log" 2>&1 &
+mock_pid=$!
+for _ in $(seq 60); do [ -f "$work/ready-s1" ] && break; sleep 0.25; done
+if [ ! -f "$work/ready-s1" ]; then cat "$work/mock-s1.log"; exit 1; fi
+
+set +e
+docker run --rm --network host -v "$root":/repo -v "$work":/work \
+  -w /repo/"${qmdir#$root/}" \
+  -e STUB_QUA_PROGRAM=tests/corpus/qaoa_p1.golden.pb \
+  "$img" bash -lc '
+command -v protoc > /dev/null || \
+  { apt-get update -qq && apt-get install -y -qq libprotobuf-dev; } > /dev/null 2>&1
+mkdir -p /work/qmtmp
+/work/p3_checks --corpus tests/corpus --qm-endpoint "127.0.0.1:'"$port"'" \
+  --qm-config tests/qua_config.pb --qm-builder tests/stub_qua_build.py \
+  --qm-python python3 --qm-tmpdir /work/qmtmp \
+  --rpc-log /work/rpc-s1.jsonl --mock
+rc=$?
+chown -R '"$(id -u):$(id -g)"' /work
+exit $rc
+' > "$work/s1.log" 2>&1
+rc=$?
+set -e
+
+fail=0
+if [ "$rc" -eq 0 ]; then
+  echo "FAIL S1: expected the run to fail, it passed"; fail=1
+elif ! grep -q "four distinct shots" "$work/s1.log"; then
+  echo "FAIL S1: failed for the wrong reason:"; tail -3 "$work/s1.log"; fail=1
+elif ! grep -q "QmService/Close" "$work/rpc-s1.jsonl"; then
+  echo "FAIL S1: the quantum machine was NOT released after the failure"
+  echo "--- RPCs seen ---"; cut -c1-90 "$work/rpc-s1.jsonl"; fail=1
+else
+  echo "ok   S1: a failing assertion still releases the quantum machine"
+fi
+[ "$fail" = 0 ] || exit 1

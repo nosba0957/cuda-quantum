@@ -12,7 +12,7 @@
 set -euo pipefail
 HERE=$(cd "$(dirname "$0")" && pwd)
 PY=${PY:-/home/asrlabncku/as_ntu_ncku/.venv/bin/python}
-STATE=${QUAM_STATE_PATH:-$HOME/as_ntu_ncku/as-qpu-10q9c}
+STATE=${QUAM_STATE_PATH:-$HOME/as_ntu_ncku/as-qpu-5q4c}
 
 "$PY" "$HERE/../tools/quam2pb.py" -o "$HERE/qua_config.pb" --state-path "$STATE"
 for f in "$HERE"/corpus/*.qasm; do
