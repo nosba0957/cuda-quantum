@@ -226,3 +226,19 @@ CUDAQ_LOG_LEVEL=info|trace CUDAQ_LOG_FILE=out.txt ./my_kernel.out
 with the product (onboarding guidance and Qiskit porting). They document CUDA-Q
 *usage*, not this codebase's internals — update them when user-visible APIs or
 target behavior change.
+
+## Agent skills
+
+### Issue tracker
+
+Local markdown under `.scratch/<feature>/`; there is no GitHub issue tracker for
+this fork. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical roles, unrenamed. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: `CONTEXT.md` and `docs/adr/` at the repo root (neither exists
+yet; they are created lazily). See `docs/agents/domain.md`.
