@@ -39,6 +39,13 @@ std::string readFile(const std::string &path) {
   return ss.str();
 }
 
+bool flag(int argc, char **argv, const std::string &name) {
+  for (int i = 1; i < argc; ++i)
+    if (name == argv[i])
+      return true;
+  return false;
+}
+
 std::string option(int argc, char **argv, const std::string &flag,
                    const std::string &fallback) {
   for (int i = 1; i + 1 < argc; ++i)
@@ -101,18 +108,14 @@ struct RpcLog {
 };
 
 void expect(bool condition, const std::string &what) {
-  if (!condition) {
-    std::cerr << "FAIL: " << what << "\n";
-    std::exit(1);
-  }
+  if (!condition)
+    throw std::runtime_error(what);
 }
 
 void expectEq(std::size_t got, std::size_t want, const std::string &what) {
-  if (got != want) {
-    std::cerr << "FAIL: " << what << ": got " << got << ", want " << want
-              << "\n";
-    std::exit(1);
-  }
+  if (got != want)
+    throw std::runtime_error(what + ": got " + std::to_string(got) + ", want " +
+                             std::to_string(want));
 }
 
 // -- offline -----------------------------------------------------------------
@@ -382,13 +385,13 @@ int main(int argc, char **argv) {
     checkStructuralKey(corpus);
     checkAgainstCorpusManifests(corpus);
     checkRegistration();
-    for (int i = 1; i < argc; ++i)
-      if (std::string("--live") == argv[i]) {
-        checkLive(corpus, endpoint, cluster);
-        std::cout << "all good (live sanity pass)\n";
-        return 0;
-      }
-    if (logPath.empty()) {
+    if (flag(argc, argv, "--live")) {
+      checkLive(corpus, endpoint, cluster);
+      std::cout << "all good (live sanity pass)\n";
+      return 0;
+    }
+    // Anything past here queues a job. Require the operator to say so.
+    if (!flag(argc, argv, "--mock") || logPath.empty()) {
       std::cout << "all good (offline checks only)\n";
       return 0;
     }
