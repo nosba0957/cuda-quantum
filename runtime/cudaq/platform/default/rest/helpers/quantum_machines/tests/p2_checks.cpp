@@ -93,7 +93,7 @@ void checkFrameCodec() {
 }
 
 std::string encodeShots(const std::vector<std::string> &bitstrings,
-                        std::size_t elementBytes = 4) {
+                        std::size_t elementBytes = 8) {
   std::string out;
   for (const auto &bits : bitstrings)
     for (char c : bits) {

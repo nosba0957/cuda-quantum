@@ -63,8 +63,11 @@ def check_parse():
         assert prog.HasField("script"), f"{name}: no script"
 
         declared = {v.name for v in prog.script.variables if v.isInputStream}
-        assert declared == {manifest["input_stream"]}, \
-            f"{name}: input streams {declared} != {manifest['input_stream']}"
+        # An angle-free circuit declares no stream at all: there is nothing to
+        # push, so the job runs its shots as soon as it starts.
+        want = {manifest["input_stream"]} if manifest["input_stream"] else set()
+        assert declared == want, \
+            f"{name}: input streams {declared} != {want}"
 
         # resultAnalysis is a generic s-expression: saveAll(<creg>, buffer(<size>, ...)).
         for creg in manifest["result_streams"]:

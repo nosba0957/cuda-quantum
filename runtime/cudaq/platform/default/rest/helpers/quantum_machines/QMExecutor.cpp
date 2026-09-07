@@ -613,7 +613,10 @@ QMProgram &QMExecutor::programFor(const std::string &key,
       throw std::runtime_error("quantum_machines: AddCompiledToQueue failed: " +
                                response.error().details());
     program.jobId = response.success().job_id();
-    waitUntilRunning(program.jobId);
+    // Only a push needs the job running. A stream-free job may already be
+    // PROCESSING by the time we could ask.
+    if (!program.inputStream.empty())
+      waitUntilRunning(program.jobId);
     program.pushes = 0;
     program.itemsConsumed = 0;
     CUDAQ_INFO("quantum_machines: queued program {} as job {}",
@@ -623,6 +626,11 @@ QMProgram &QMExecutor::programFor(const std::string &key,
 }
 
 void QMExecutor::pushAngles(QMProgram &program, const QasmStructure &scan) {
+  if (program.inputStream.empty()) {
+    // No angles, so no stream gates the job: it runs its shots on start.
+    ++program.pushes;
+    return;
+  }
   pb::JobServicePushToInputStreamRequest request;
   request.set_job_id(program.jobId);
   request.set_stream_name(program.inputStream);
@@ -724,9 +732,18 @@ QMExecutor::fetchCounts(QMProgram &program) {
         });
     if (!failure.empty())
       throw std::runtime_error("quantum_machines: GetNamedResults: " + failure);
-    if (!status.ok())
+    if (!status.ok()) {
+      // The QOP registers a job's result streams a moment after the job
+      // starts, and reports the name as missing until it has.
+      const std::string described = status.describe();
+      if (described.find("cannot find result") != std::string::npos &&
+          std::chrono::steady_clock::now() <= deadline) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+        continue;
+      }
       throw std::runtime_error("quantum_machines: GetNamedResults failed: " +
-                               status.describe());
+                               described);
+    }
 
     if (complete())
       break;
