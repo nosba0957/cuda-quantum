@@ -263,7 +263,42 @@ message GetNamedResultResponse {
   }
 }
 
+// qm.grpc.v2.JobExecutionStatus. Value names are local; only the numbers ride
+// the wire.
+enum JobExecutionStatus {
+  JOB_EXECUTION_STATUS_UNSET = 0;
+  JOB_EXECUTION_STATUS_UNKNOWN = 1;
+  JOB_EXECUTION_STATUS_PENDING = 2;
+  JOB_EXECUTION_STATUS_RUNNING = 3;
+  JOB_EXECUTION_STATUS_COMPLETED = 4;
+  JOB_EXECUTION_STATUS_CANCELED = 5;
+  JOB_EXECUTION_STATUS_LOADING = 6;
+  JOB_EXECUTION_STATUS_ERROR = 7;
+  JOB_EXECUTION_STATUS_PROCESSING = 8;
+}
+
+message JobServiceGetJobStatusRequest {
+  string job_id = 1;
+}
+
+message JobServiceGetJobStatusResponse {
+  message JobServiceGetJobStatusResponseSuccess {
+    JobExecutionStatus status = 1;
+  }
+
+  message JobServiceGetJobStatusResponseError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    JobServiceGetJobStatusResponseSuccess success = 1;
+    JobServiceGetJobStatusResponseError error = 2;
+  }
+}
+
 service JobService {
+  rpc GetJobStatus(JobServiceGetJobStatusRequest)
+      returns (JobServiceGetJobStatusResponse);
   rpc PushToInputStream(JobServicePushToInputStreamRequest)
       returns (PushToInputStreamResponse);
   rpc GetNamedResults(GetNamedResultsRequest)

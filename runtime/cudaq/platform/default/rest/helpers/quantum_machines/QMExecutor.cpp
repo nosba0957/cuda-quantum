@@ -405,13 +405,18 @@ void QMExecutor::ensureMachine() {
   if (!response.ParseFromString(wire))
     throw std::runtime_error(
         "quantum_machines: OpenQuantumMachine returned an unparseable reply");
-  if (response.has_error())
+  if (response.has_error()) {
+    std::string detail;
+    const auto append = [&detail](const char *kind, const auto &messages) {
+      for (const auto &m : messages)
+        detail += "\n  " + std::string(kind) + " [" + m.group() + "] " +
+                  m.path() + ": " + m.message();
+    };
+    append("config", response.error().config_validation_errors());
+    append("physical", response.error().physical_validation_errors());
     throw std::runtime_error(
-        "quantum_machines: the QOP rejected the QuaConfig (" +
-        std::to_string(response.error().config_validation_errors_size()) +
-        " config and " +
-        std::to_string(response.error().physical_validation_errors_size()) +
-        " physical validation errors)");
+        "quantum_machines: the QOP rejected the QuaConfig" + detail);
+  }
   machineId = response.success().quantum_machine_id();
   CUDAQ_INFO("quantum_machines: opened quantum machine {} ({} byte config)",
              machineId, configBlob.size());
@@ -430,6 +435,10 @@ std::string QMExecutor::quantumMachineId() {
 
 void QMExecutor::closeQuantumMachine() {
   std::lock_guard<std::mutex> guard(sessionMutex);
+  closeLocked();
+}
+
+void QMExecutor::closeLocked() {
   if (machineId.empty() || !channel)
     return;
   pb::QmServiceCloseRequest request;
@@ -444,6 +453,44 @@ void QMExecutor::closeQuantumMachine() {
     throw std::runtime_error("quantum_machines: Close failed for " + closed +
                              ": " + status.describe());
   CUDAQ_INFO("quantum_machines: closed quantum machine {}", closed);
+}
+
+void QMExecutor::waitUntilRunning(const std::string &jobId) {
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(60);
+  for (;;) {
+    pb::JobServiceGetJobStatusRequest request;
+    request.set_job_id(jobId);
+    std::string wire;
+    auto status = openChannel().invoke("/qm.grpc.v2.JobService/GetJobStatus",
+                                       request.SerializeAsString(), wire);
+    if (!status.ok())
+      throw std::runtime_error("quantum_machines: GetJobStatus failed: " +
+                               status.describe());
+    pb::JobServiceGetJobStatusResponse response;
+    if (!response.ParseFromString(wire))
+      throw std::runtime_error(
+          "quantum_machines: GetJobStatus returned an unparseable reply");
+    if (response.has_error())
+      throw std::runtime_error("quantum_machines: GetJobStatus failed: " +
+                               response.error().details());
+
+    const auto state = response.success().status();
+    if (state == pb::JOB_EXECUTION_STATUS_RUNNING)
+      return;
+    if (state != pb::JOB_EXECUTION_STATUS_UNSET &&
+        state != pb::JOB_EXECUTION_STATUS_UNKNOWN &&
+        state != pb::JOB_EXECUTION_STATUS_PENDING &&
+        state != pb::JOB_EXECUTION_STATUS_LOADING)
+      throw std::runtime_error("quantum_machines: job " + jobId +
+                               " reached status " + std::to_string(state) +
+                               " without ever running");
+    if (std::chrono::steady_clock::now() > deadline)
+      throw std::runtime_error("quantum_machines: job " + jobId +
+                               " did not start within 60s (status " +
+                               std::to_string(state) + ")");
+    std::this_thread::sleep_for(std::chrono::milliseconds(20));
+  }
 }
 
 QMProgram QMExecutor::buildProgram(const KernelExecution &code) {
@@ -566,6 +613,7 @@ QMProgram &QMExecutor::programFor(const std::string &key,
       throw std::runtime_error("quantum_machines: AddCompiledToQueue failed: " +
                                response.error().details());
     program.jobId = response.success().job_id();
+    waitUntilRunning(program.jobId);
     program.pushes = 0;
     program.itemsConsumed = 0;
     CUDAQ_INFO("quantum_machines: queued program {} as job {}",
@@ -724,41 +772,49 @@ detail::future QMExecutor::execute(std::vector<KernelExecution> &codesToExecute,
   const bool single = codesToExecute.size() == 1;
   std::vector<KernelExecution> codes = codesToExecute;
 
-  return std::async(
-      std::launch::async, [this, codes, isObserve, single]() mutable {
-        std::lock_guard<std::mutex> guard(sessionMutex);
-        loadSettings();
+  return std::async(std::launch::async, [this, codes, isObserve,
+                                         single]() mutable {
+    std::lock_guard<std::mutex> guard(sessionMutex);
+    try {
+      loadSettings();
 
-        std::vector<ExecutionResult> results;
-        for (auto &code : codes) {
-          if (!code.mapping_reorder_idx.empty())
-            CUDAQ_WARN("quantum_machines: kernel {} carries a mapping reorder "
-                       "index, which this target does not apply",
-                       code.name);
-          const auto scan = scanQasm(code.code);
-          auto &program = programFor(structuralKey(scan), code, scan);
-          pushAngles(program, scan);
-          auto counts = fetchCounts(program);
+      std::vector<ExecutionResult> results;
+      for (auto &code : codes) {
+        if (!code.mapping_reorder_idx.empty())
+          CUDAQ_WARN("quantum_machines: kernel {} carries a mapping reorder "
+                     "index, which this target does not apply",
+                     code.name);
+        const auto scan = scanQasm(code.code);
+        auto &program = programFor(structuralKey(scan), code, scan);
+        pushAngles(program, scan);
+        auto counts = fetchCounts(program);
 
-          if (single && !isObserve) {
-            for (auto &[name, dictionary] : counts)
-              results.emplace_back(dictionary, name);
-            if (counts.size() == 1)
-              results.emplace_back(counts.begin()->second, GlobalRegisterName);
-          } else {
-            // One register per kernel, because several kernels share one creg
-            // name and a per-creg register would have them overwrite each
-            // other.
-            if (counts.size() != 1)
-              throw std::runtime_error("quantum_machines: kernel " + code.name +
-                                       " has " + std::to_string(counts.size()) +
-                                       " classical registers; multi-kernel "
-                                       "submission needs exactly one");
-            results.emplace_back(counts.begin()->second, code.name);
-          }
+        if (single && !isObserve) {
+          for (auto &[name, dictionary] : counts)
+            results.emplace_back(dictionary, name);
+          if (counts.size() == 1)
+            results.emplace_back(counts.begin()->second, GlobalRegisterName);
+        } else {
+          // One register per kernel, because several kernels share one creg
+          // name and a per-creg register would have them overwrite each
+          // other.
+          if (counts.size() != 1)
+            throw std::runtime_error("quantum_machines: kernel " + code.name +
+                                     " has " + std::to_string(counts.size()) +
+                                     " classical registers; multi-kernel "
+                                     "submission needs exactly one");
+          results.emplace_back(counts.begin()->second, code.name);
         }
-        return sample_result(results);
-      });
+      }
+      return sample_result(results);
+    } catch (...) {
+      try {
+        closeLocked();
+      } catch (...) {
+      }
+      throw;
+    }
+  });
 }
 
 } // namespace cudaq

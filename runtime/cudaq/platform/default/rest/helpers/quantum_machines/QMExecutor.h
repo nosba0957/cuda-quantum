@@ -94,11 +94,16 @@ public:
   /// configuration on the controllers and collides with the next user.
   void closeQuantumMachine();
 
+  /// Poll until the QOP reports the job running; input streams reject a push
+  /// before that.
+  void waitUntilRunning(const std::string &jobId);
+
   const QMSettings &settings();
   std::size_t cachedPrograms();
 
 private:
   void loadSettings();
+  void closeLocked();
   qm::GrpcChannel &openChannel();
   void ensureMachine();
   QMProgram &programFor(const std::string &key, const KernelExecution &code,

@@ -152,6 +152,22 @@ def main(argv):
         })
 
     check(
+        "GetJobStatus request",
+        job_api_pb2.JobServiceGetJobStatusRequest(job_id="job-99"),
+        Min("JobServiceGetJobStatusRequest"), {"job_id": "job-99"})
+
+    resp = job_api_pb2.JobServiceGetJobStatusResponse()
+    resp.success.status = common_types_pb2.RUNNING
+    check("GetJobStatus response(RUNNING)", resp,
+          Min("JobServiceGetJobStatusResponse"), {"success.status": 3})
+
+    resp = job_api_pb2.JobServiceGetJobStatusResponse()
+    resp.error.details = "no such job"
+    check("GetJobStatus response(error)", resp,
+          Min("JobServiceGetJobStatusResponse"),
+          {"error.details": "no such job"})
+
+    check(
         "PushToInputStream(int)",
         job_api_pb2.JobServicePushToInputStreamRequest(
             job_id="job-99",

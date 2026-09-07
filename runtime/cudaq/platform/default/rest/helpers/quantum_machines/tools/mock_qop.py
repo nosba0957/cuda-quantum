@@ -26,7 +26,7 @@ import time
 from concurrent import futures
 
 import grpc
-from qm.grpc.qm.grpc.v2 import job_api_pb2, qm_api_pb2, qmm_api_pb2
+from qm.grpc.qm.grpc.v2 import common_types_pb2, job_api_pb2, qm_api_pb2, qmm_api_pb2
 from qm.grpc.qm.pb import inc_qua_pb2
 
 QMM = "/qm.grpc.v2.QmmService"
@@ -45,6 +45,7 @@ class MockQOP:
         self.log = []
         self.lock = threading.Lock()
         self.counter = 0
+        self.pending_polls = {}
         self.log_file = open(args.log, "w") if args.log else None
 
     def record(self, method, payload, **fields):
@@ -116,6 +117,23 @@ class MockQOP:
                     job_id=job_id)
         resp = qm_api_pb2.AddCompiledToQueueResponse()
         resp.success.job_id = job_id
+        return resp.SerializeToString()
+
+    def get_job_status(self, payload, context):
+        req = job_api_pb2.JobServiceGetJobStatusRequest.FromString(payload)
+        seen = self.pending_polls.get(req.job_id, 0)
+        self.pending_polls[req.job_id] = seen + 1
+        # Real hardware queues; report PENDING first so the executor's wait
+        # loop is exercised rather than short-circuited.
+        running = seen >= self.args.pending_polls
+        self.record(f"{JOB}/GetJobStatus",
+                    payload,
+                    job_id=req.job_id,
+                    poll=seen,
+                    status="RUNNING" if running else "PENDING")
+        resp = job_api_pb2.JobServiceGetJobStatusResponse()
+        resp.success.status = (common_types_pb2.RUNNING
+                               if running else common_types_pb2.PENDING)
         return resp.SerializeToString()
 
     def close(self, payload, context):
@@ -204,6 +222,8 @@ class MockQOP:
                 unary(self.add_compiled_to_queue, *ident),
             f"{QM}/Close":
                 unary(self.close, *ident),
+            f"{JOB}/GetJobStatus":
+                unary(self.get_job_status, *ident),
             f"{JOB}/PushToInputStream":
                 unary(self.push_to_input_stream, *ident),
             f"{JOB}/GetNamedResults":
@@ -240,6 +260,9 @@ def main():
                     type=float,
                     default=0.4,
                     help="seconds between streamed frames")
+    ap.add_argument("--pending-polls", type=int, default=1,
+                    help="GetJobStatus replies PENDING this many times before "
+                         "RUNNING, modelling the real queue")
     ap.add_argument("--results",
                     default="00,11,11,00",
                     help="comma-separated per-shot outcomes, LSB-first")
