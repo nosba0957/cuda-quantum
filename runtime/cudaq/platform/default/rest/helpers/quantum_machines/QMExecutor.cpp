@@ -23,6 +23,7 @@
 #include <filesystem>
 #include <fstream>
 #include <future>
+#include <iomanip>
 #include <set>
 #include <sstream>
 #include <thread>
@@ -305,6 +306,8 @@ void QMExecutor::loadSettings() {
     config.resetType = v;
   if (auto v = get("reset-attempts"); !v.empty())
     config.resetAttempts = std::stoi(v);
+  if (auto v = get("parametric"); !v.empty())
+    config.parametric = v != "0" && v != "false" && v != "off";
   if (auto v = get("element-bytes"); !v.empty())
     config.resultElementBytes = std::stoul(v);
   if (auto v = get("result-timeout"); !v.empty())
@@ -379,6 +382,15 @@ std::string QMExecutor::quamFingerprint() {
 
 std::string QMExecutor::structuralKey(const QasmStructure &scan) {
   std::ostringstream ss;
+  // Baked-in angles are part of the compiled program, so two circuits that
+  // differ only in an angle are different programs. Blanking them is correct
+  // only when they arrive over the input stream.
+  if (!config.parametric) {
+    ss << std::setprecision(17);
+    for (double angle : scan.angles)
+      ss << angle << ',';
+    ss << '|';
+  }
   ss << scan.structure << "|shots=" << shots
      << "|iterations=" << config.iterations
      << "|opt=" << config.optimizationLevel << "|reset=" << config.resetType
@@ -514,6 +526,8 @@ QMProgram QMExecutor::buildProgram(const KernelExecution &code) {
       << " --optimization-level " << config.optimizationLevel
       << " --reset-type " << shellQuote(config.resetType)
       << " --reset-max-attempts " << config.resetAttempts;
+  if (!config.parametric)
+    cmd << " --static";
   if (!config.capsPath.empty())
     cmd << " --caps-file " << shellQuote(config.capsPath);
   if (!config.statePath.empty())
