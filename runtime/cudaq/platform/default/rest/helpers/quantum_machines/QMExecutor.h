@@ -40,6 +40,10 @@ struct QMSettings {
   int optimizationLevel = 1;
   std::string resetType = "active";
   int resetAttempts = 1;
+  /// Feed rotation angles through a QUA input stream instead of baking them
+  /// into the program. Needed only when angles change between calls; the QOP
+  /// does not currently advance input streams, so this is off by default.
+  bool parametric = false;
   /// Width of one QUA int in a GetNamedResults buffer. Not restated on that
   /// RPC; see QuaResults.h.
   std::size_t resultElementBytes = 8;

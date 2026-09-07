@@ -73,6 +73,7 @@ mkdir -p /work/qmtmp
 common="--corpus tests/corpus --qm-endpoint 127.0.0.1:$port
         --qm-config tests/qua_config.pb
         --qm-builder tests/stub_qua_build.py --qm-python python3
+        --qm-parametric 1
         --qm-tmpdir /work/qmtmp"
 
 # S6: without an explicit --mock, nothing that can queue a job may run.
@@ -126,7 +127,7 @@ mkdir -p /work/qmtmp
 /work/p3_checks --corpus tests/corpus --qm-endpoint "127.0.0.1:'"$port"'" \
   --qm-config tests/qua_config.pb --qm-builder tests/stub_qua_build.py \
   --qm-python python3 --qm-tmpdir /work/qmtmp \
-  --rpc-log /work/rpc-s1.jsonl --mock
+  --rpc-log /work/rpc-s1.jsonl --qm-parametric 1 --mock
 rc=$?
 chown -R '"$(id -u):$(id -g)"' /work
 exit $rc
