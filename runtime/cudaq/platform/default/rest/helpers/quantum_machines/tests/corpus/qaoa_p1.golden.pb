@@ -1,10 +1,8 @@
-*æu
+*¿u
 
 v1
-
-v2
-
-input_stream_angles	(0
+
+v2
 
 v3
 
@@ -21,8 +19,10 @@
 v9
 	
 v10
-	
-v11
+
+v11
+
+input_stream_angles	(0
 A
 a1"	
 False"	
@@ -104,7 +104,7 @@ A
 v45
 
 v46"
-1R›p
+1Rﬂp
 .™+
 
 q1.zsingle
@@ -141,46 +141,46 @@ A
 
 coupler_q4_q5single
 -0.05360000000000002
-£m:†m
-
-2
-0"
-v2"
-v2*
-1024
-2"
-v2*
-1"
-v2"œl
+•m:¢m
+
+2
+0"
+v11"
+v11*
+1024!
+2"
+v11*
+1"
+v11"Õl
 ≤input_stream_angles
 ,2* "input_stream_angles
 0"
-v3
+v2
 ,2* "input_stream_angles
 1"
-v4
+v3
 ,2* "input_stream_angles
 2"
-v5
+v4
 ,2* "input_stream_angles
 3"
-v6
+v5
 ,2* "input_stream_angles
 4"
-v7
+v6
 ,2* "input_stream_angles
 5"
-v8
+v7
 ,2* "input_stream_angles
 6"
+v8
+,2* "input_stream_angles
+7"
 v9
 -2+ "input_stream_angles
-7"
-v10
--2+ "input_stream_angles
 8"
-v11
-êi:çi
+v10
+èi:åi
 
 2
 0"
@@ -190,7 +190,7 @@ A
 2"
 v1*
 1"
-v1"ºh
+v1"ªh
 Z	
 -0.25
 q1.xy
@@ -294,7 +294,7 @@ eZcXV"75"	
 0.0*&$"	
 0.0*"	
 1.0*
-v3*
+v2*
 0.15915494309189535
 q2.xy
 Z	
@@ -392,6 +392,223 @@ UJS
 
 
 q1.xy:
+x90_DragCosine
+tZrge"FD"	
+0.0*53"
+-3.141592653589793*"	
+1.0*
+v6*
+0.15915494309189535
+q1.xy
+
+
+
+q1.xy:
+x90_DragCosine
+Z	
+-1.25
+q1.xy
+Z	
+-0.25
+q2.xy
+
+
+
+q2.xy:
+x90_DragCosine
+Z	
+-0.25
+q2.xy
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q2.xy
+
+q2.z
+
+q2.resonator
+
+coupler_q2_q3
+1
+/
+
+q3.z:%
+#Cz_flattop.flux_pulse_control_q2_q3
+:
+8
+
+coupler_q2_q3:%
+#Cz_flattop.coupler_flux_pulse_q2_q3
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q2.xy
+
+q2.z
+
+q2.resonator
+
+coupler_q2_q3
+%Z#
+0.7401566930788701
+q3.xy
+%Z#
+0.4864409448674621
+q2.xy
+'
+%
+
+q3.xy
+	
+0.0"
+4:
+x180
+'
+%
+
+q2.xy
+	
+0.0"
+4:
+x180
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q2.xy
+
+q2.z
+
+q2.resonator
+
+coupler_q2_q3
+Z	
+-0.25
+q3.xy
+
+
+
+q3.xy:
+x90_DragCosine
+Z	
+-0.25
+q3.xy
+eZcXV"75"	
+0.0*&$"	
+0.0*"	
+1.0*
+v3*
+0.15915494309189535
+q3.xy
+Z	
+-0.25
+q3.xy
+
+
+
+q3.xy:
+x90_DragCosine
+Z	
+-0.25
+q3.xy
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q2.xy
+
+q2.z
+
+q2.resonator
+
+coupler_q2_q3
+1
+/
+
+q3.z:%
+#Cz_flattop.flux_pulse_control_q2_q3
+:
+8
+
+coupler_q2_q3:%
+#Cz_flattop.coupler_flux_pulse_q2_q3
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q2.xy
+
+q2.z
+
+q2.resonator
+
+coupler_q2_q3
+%Z#
+0.7401566930788701
+q3.xy
+%Z#
+0.4864409448674621
+q2.xy
+'
+%
+
+q3.xy
+	
+0.0"
+4:
+x180
+'
+%
+
+q2.xy
+	
+0.0"
+4:
+x180
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q2.xy
+
+q2.z
+
+q2.resonator
+
+coupler_q2_q3
+Z	
+-0.25
+q2.xy
+
+
+
+q2.xy:
 x90_DragCosine
 tZrge"FD"	
 0.0*53"
@@ -399,17 +616,6 @@ tZrge"FD"	
 1.0*
 v7*
 0.15915494309189535
-q1.xy
-
-
-
-q1.xy:
-x90_DragCosine
-Z	
--1.25
-q1.xy
-Z	
--0.25
 q2.xy
 
 
@@ -417,85 +623,8 @@ tZrge"FD"	
 q2.xy:
 x90_DragCosine
 Z	
--0.25
+-1.25
 q2.xy
-UJS
-
-q3.xy
-
-q3.z
-
-q3.resonator
-
-q2.xy
-
-q2.z
-
-q2.resonator
-
-coupler_q2_q3
-1
-/
-
-q3.z:%
-#Cz_flattop.flux_pulse_control_q2_q3
-:
-8
-
-coupler_q2_q3:%
-#Cz_flattop.coupler_flux_pulse_q2_q3
-UJS
-
-q3.xy
-
-q3.z
-
-q3.resonator
-
-q2.xy
-
-q2.z
-
-q2.resonator
-
-coupler_q2_q3
-%Z#
-0.7401566930788701
-q3.xy
-%Z#
-0.4864409448674621
-q2.xy
-'
-%
-
-q3.xy
-	
-0.0"
-4:
-x180
-'
-%
-
-q2.xy
-	
-0.0"
-4:
-x180
-UJS
-
-q3.xy
-
-q3.z
-
-q3.resonator
-
-q2.xy
-
-q2.z
-
-q2.resonator
-
-coupler_q2_q3
 Z	
 -0.25
 q3.xy
@@ -507,24 +636,112 @@ UJS
 Z	
 -0.25
 q3.xy
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q4.xy
+
+q4.z
+
+q4.resonator
+
+coupler_q3_q4
+1
+/
+
+q3.z:%
+#Cz_flattop.flux_pulse_control_q4_q3
+:
+8
+
+coupler_q3_q4:%
+#Cz_flattop.coupler_flux_pulse_q4_q3
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q4.xy
+
+q4.z
+
+q4.resonator
+
+coupler_q3_q4
+$Z"
+0.816061235098526
+q3.xy
+&Z$
+0.07765781233140856
+q4.xy
+'
+%
+
+q3.xy
+	
+0.0"
+4:
+x180
+'
+%
+
+q4.xy
+	
+0.0"
+4:
+x180
+UJS
+
+q3.xy
+
+q3.z
+
+q3.resonator
+
+q4.xy
+
+q4.z
+
+q4.resonator
+
+coupler_q3_q4
+Z	
+-0.25
+q4.xy
+
+
+
+q4.xy:
+x90_DragCosine
+Z	
+-0.25
+q4.xy
 eZcXV"75"	
 0.0*&$"	
 0.0*"	
 1.0*
 v4*
 0.15915494309189535
-q3.xy
+q4.xy
 Z	
 -0.25
-q3.xy
+q4.xy
 
 
 
-q3.xy:
+q4.xy:
 x90_DragCosine
 Z	
 -0.25
-q3.xy
+q4.xy
 UJS
 
 q3.xy
@@ -533,23 +750,23 @@ UJS
 
 q3.resonator
 
-q2.xy
+q4.xy
 
-q2.z
+q4.z
 
-q2.resonator
+q4.resonator
 
-coupler_q2_q3
+coupler_q3_q4
 1
 /
 
 q3.z:%
-#Cz_flattop.flux_pulse_control_q2_q3
+#Cz_flattop.flux_pulse_control_q4_q3
 :
 8
 
-coupler_q2_q3:%
-#Cz_flattop.coupler_flux_pulse_q2_q3
+coupler_q3_q4:%
+#Cz_flattop.coupler_flux_pulse_q4_q3
 UJS
 
 q3.xy
@@ -558,19 +775,19 @@ UJS
 
 q3.resonator
 
-q2.xy
+q4.xy
 
-q2.z
+q4.z
 
-q2.resonator
+q4.resonator
 
-coupler_q2_q3
-%Z#
-0.7401566930788701
+coupler_q3_q4
+$Z"
+0.816061235098526
 q3.xy
-%Z#
-0.4864409448674621
-q2.xy
+&Z$
+0.07765781233140856
+q4.xy
 '
 %
 
@@ -582,7 +799,7 @@ UJS
 '
 %
 
-q2.xy
+q4.xy
 	
 0.0"
 4:
@@ -595,20 +812,20 @@ UJS
 
 q3.resonator
 
-q2.xy
+q4.xy
 
-q2.z
+q4.z
 
-q2.resonator
+q4.resonator
 
-coupler_q2_q3
+coupler_q3_q4
 Z	
 -0.25
-q2.xy
+q3.xy
 
 
 
-q2.xy:
+q3.xy:
 x90_DragCosine
 tZrge"FD"	
 0.0*53"
@@ -616,17 +833,6 @@ tZrge"FD"	
 1.0*
 v8*
 0.15915494309189535
-q2.xy
-
-
-
-q2.xy:
-x90_DragCosine
-Z	
--1.25
-q2.xy
-Z	
--0.25
 q3.xy
 
 
@@ -634,15 +840,26 @@ tZrge"FD"	
 q3.xy:
 x90_DragCosine
 Z	
--0.25
+-1.25
 q3.xy
+Z	
+-0.25
+q4.xy
+
+
+
+q4.xy:
+x90_DragCosine
+Z	
+-0.25
+q4.xy
 UJS
 
-q3.xy
+q5.xy
 
-q3.z
+q5.z
 
-q3.resonator
+q5.resonator
 
 q4.xy
 
@@ -650,24 +867,24 @@ UJS
 
 q4.resonator
 
-coupler_q3_q4
+coupler_q4_q5
 1
 /
 
-q3.z:%
-#Cz_flattop.flux_pulse_control_q4_q3
+q5.z:%
+#Cz_flattop.flux_pulse_control_q4_q5
 :
 8
 
-coupler_q3_q4:%
-#Cz_flattop.coupler_flux_pulse_q4_q3
+coupler_q4_q5:%
+#Cz_flattop.coupler_flux_pulse_q4_q5
 UJS
 
-q3.xy
+q5.xy
 
-q3.z
+q5.z
 
-q3.resonator
+q5.resonator
 
 q4.xy
 
@@ -675,17 +892,17 @@ UJS
 
 q4.resonator
 
-coupler_q3_q4
+coupler_q4_q5
+%Z#
+0.5571009256219651
+q5.xy
 $Z"
-0.816061235098526
-q3.xy
-&Z$
-0.07765781233140856
+0.781006511167176
 q4.xy
 '
 %
 
-q3.xy
+q5.xy
 	
 0.0"
 4:
@@ -700,11 +917,11 @@ $Z"
 x180
 UJS
 
-q3.xy
+q5.xy
 
-q3.z
+q5.z
 
-q3.resonator
+q5.resonator
 
 q4.xy
 
@@ -712,43 +929,43 @@ UJS
 
 q4.resonator
 
-coupler_q3_q4
+coupler_q4_q5
 Z	
 -0.25
-q4.xy
+q5.xy
 
 
 
-q4.xy:
+q5.xy:
 x90_DragCosine
 Z	
 -0.25
-q4.xy
+q5.xy
 eZcXV"75"	
 0.0*&$"	
 0.0*"	
 1.0*
 v5*
 0.15915494309189535
-q4.xy
+q5.xy
 Z	
 -0.25
-q4.xy
+q5.xy
 
 
 
-q4.xy:
+q5.xy:
 x90_DragCosine
 Z	
 -0.25
-q4.xy
+q5.xy
 UJS
 
-q3.xy
+q5.xy
 
-q3.z
+q5.z
 
-q3.resonator
+q5.resonator
 
 q4.xy
 
@@ -756,24 +973,24 @@ UJS
 
 q4.resonator
 
-coupler_q3_q4
+coupler_q4_q5
 1
 /
 
-q3.z:%
-#Cz_flattop.flux_pulse_control_q4_q3
+q5.z:%
+#Cz_flattop.flux_pulse_control_q4_q5
 :
 8
 
-coupler_q3_q4:%
-#Cz_flattop.coupler_flux_pulse_q4_q3
+coupler_q4_q5:%
+#Cz_flattop.coupler_flux_pulse_q4_q5
 UJS
 
-q3.xy
+q5.xy
 
-q3.z
+q5.z
 
-q3.resonator
+q5.resonator
 
 q4.xy
 
@@ -781,17 +998,17 @@ UJS
 
 q4.resonator
 
-coupler_q3_q4
+coupler_q4_q5
+%Z#
+0.5571009256219651
+q5.xy
 $Z"
-0.816061235098526
-q3.xy
-&Z$
-0.07765781233140856
+0.781006511167176
 q4.xy
 '
 %
 
-q3.xy
+q5.xy
 	
 0.0"
 4:
@@ -806,11 +1023,11 @@ $Z"
 x180
 UJS
 
-q3.xy
+q5.xy
 
-q3.z
+q5.z
 
-q3.resonator
+q5.resonator
 
 q4.xy
 
@@ -818,237 +1035,20 @@ UJS
 
 q4.resonator
 
-coupler_q3_q4
+coupler_q4_q5
 Z	
 -0.25
-q3.xy
+q4.xy
 
 
 
-q3.xy:
+q4.xy:
 x90_DragCosine
 tZrge"FD"	
 0.0*53"
 -3.141592653589793*"	
 1.0*
 v9*
-0.15915494309189535
-q3.xy
-
-
-
-q3.xy:
-x90_DragCosine
-Z	
--1.25
-q3.xy
-Z	
--0.25
-q4.xy
-
-
-
-q4.xy:
-x90_DragCosine
-Z	
--0.25
-q4.xy
-UJS
-
-q5.xy
-
-q5.z
-
-q5.resonator
-
-q4.xy
-
-q4.z
-
-q4.resonator
-
-coupler_q4_q5
-1
-/
-
-q5.z:%
-#Cz_flattop.flux_pulse_control_q4_q5
-:
-8
-
-coupler_q4_q5:%
-#Cz_flattop.coupler_flux_pulse_q4_q5
-UJS
-
-q5.xy
-
-q5.z
-
-q5.resonator
-
-q4.xy
-
-q4.z
-
-q4.resonator
-
-coupler_q4_q5
-%Z#
-0.5571009256219651
-q5.xy
-$Z"
-0.781006511167176
-q4.xy
-'
-%
-
-q5.xy
-	
-0.0"
-4:
-x180
-'
-%
-
-q4.xy
-	
-0.0"
-4:
-x180
-UJS
-
-q5.xy
-
-q5.z
-
-q5.resonator
-
-q4.xy
-
-q4.z
-
-q4.resonator
-
-coupler_q4_q5
-Z	
--0.25
-q5.xy
-
-
-
-q5.xy:
-x90_DragCosine
-Z	
--0.25
-q5.xy
-eZcXV"75"	
-0.0*&$"	
-0.0*"	
-1.0*
-v6*
-0.15915494309189535
-q5.xy
-Z	
--0.25
-q5.xy
-
-
-
-q5.xy:
-x90_DragCosine
-Z	
--0.25
-q5.xy
-UJS
-
-q5.xy
-
-q5.z
-
-q5.resonator
-
-q4.xy
-
-q4.z
-
-q4.resonator
-
-coupler_q4_q5
-1
-/
-
-q5.z:%
-#Cz_flattop.flux_pulse_control_q4_q5
-:
-8
-
-coupler_q4_q5:%
-#Cz_flattop.coupler_flux_pulse_q4_q5
-UJS
-
-q5.xy
-
-q5.z
-
-q5.resonator
-
-q4.xy
-
-q4.z
-
-q4.resonator
-
-coupler_q4_q5
-%Z#
-0.5571009256219651
-q5.xy
-$Z"
-0.781006511167176
-q4.xy
-'
-%
-
-q5.xy
-	
-0.0"
-4:
-x180
-'
-%
-
-q4.xy
-	
-0.0"
-4:
-x180
-UJS
-
-q5.xy
-
-q5.z
-
-q5.resonator
-
-q4.xy
-
-q4.z
-
-q4.resonator
-
-coupler_q4_q5
-Z	
--0.25
-q4.xy
-
-
-
-q4.xy:
-x90_DragCosine
-uZshf"GE"	
-0.0*64"
--3.141592653589793*"	
-1.0*
-v10*
 0.15915494309189535
 q4.xy
 
@@ -1067,7 +1067,7 @@ uZshf"GE"	
 0.0*64"
 -3.141592653589793*"	
 1.0*
-v11*
+v10*
 0.15915494309189535
 q5.xy
 

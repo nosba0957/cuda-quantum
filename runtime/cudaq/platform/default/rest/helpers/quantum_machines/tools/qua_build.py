@@ -154,26 +154,31 @@ def build(qc, machine, params, shots, iterations, stream_name):
 
     with program() as prog:
         shot = declare(int)
-        iteration = declare(int)
         streams = {c.name: declare_stream() for c in qc.cregs}
-        # A circuit whose angles all fold into constants still gets a
-        # one-element stream, so every batch is gated by exactly one push and
-        # the C++ side never has to special-case it.
-        inp = declare_input_stream("client", stream_name, fixed,
-                                   size=max(len(params), 1))
         param_map = {p: declare(fixed) for p in params}
 
         machine.apply_all_flux_to_joint_idle()
 
-        with for_(iteration, 0, iteration < iterations, iteration + 1):
-            receive_from_stream(inp)
-            for k, p in enumerate(params):
-                assign(param_map[p], inp[k])
+        def shots_loop():
             with for_(shot, 0, shot < shots, shot + 1):
                 cregs = emit_circuit(qc, machine, param_map)
                 for c in qc.cregs:
                     for i in range(c.size):
                         save(cregs[c.name][i], streams[c.name])
+
+        if params:
+            iteration = declare(int)
+            inp = declare_input_stream("client", stream_name, fixed,
+                                       size=len(params))
+            with for_(iteration, 0, iteration < iterations, iteration + 1):
+                receive_from_stream(inp)
+                for k, p in enumerate(params):
+                    assign(param_map[p], inp[k])
+                shots_loop()
+        else:
+            # No angles, so no stream to gate on: the job runs its shots once
+            # and ends, and the C++ side requeues for the next batch.
+            shots_loop()
 
         with stream_processing():
             for c in qc.cregs:
@@ -325,13 +330,13 @@ def main(argv=None):
         open(args.script, "w").write(generate_qua_script(prog))
 
     manifest = {
-        "input_stream": f"input_stream_{args.stream_name}",
+        "input_stream": f"input_stream_{args.stream_name}" if params else "",
         "input_stream_type": "fixed",
-        "input_stream_size": max(len(params), 1),
+        "input_stream_size": len(params),
         "angles": [p.name for p in params],
         "angle_values": [angle_values[int(p.name.split("_")[1])] for p in params],
         "shots": args.shots,
-        "iterations": args.iterations,
+        "iterations": args.iterations if params else 1,
         "result_streams": [{"name": c.name, "size": c.size} for c in qc.cregs],
         "qubits": layout,
         "bytes": len(blob),

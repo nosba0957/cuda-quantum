@@ -28,11 +28,12 @@ namespace cudaq::qm {
 
 class QuaResultDecoder {
 public:
-  /// @param elementBytes width of one QUA int in the result stream. QUA `int`
+  /// @param elementBytes width of one QUA int in the result stream. QOP 3.6
+  /// sends int64 (measured: numpy dtype '<i8'). QUA `int`
   /// is 32 bits; the QOP does not restate the dtype on this RPC, it is carried
   /// out of band by GetJobNamedResultHeader.
   QuaResultDecoder(std::string registerName, std::size_t cregSize,
-                   std::size_t shotsPerBatch, std::size_t elementBytes = 4);
+                   std::size_t shotsPerBatch, std::size_t elementBytes = 8);
 
   /// Feed raw DataChunk payload. Chunk boundaries are arbitrary and need not
   /// align with shots.

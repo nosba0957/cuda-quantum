@@ -59,6 +59,7 @@ fi
 
 set +e
 docker run --rm --network host \
+  -e CUDAQ_LOG_LEVEL="${CUDAQ_LOG_LEVEL:-}" \
   -v "$root":/workspace -v "$hostroot":"$hostroot" -v "$work":/work \
   -w /workspace/"${qmdir#$root/}" "$img" bash -lc '
 set -e
@@ -90,14 +91,22 @@ echo "--- asserting on what cudaq::sample returned ---"
 fail=0
 check() { if eval "$2"; then echo "ok   $1"; else echo "FAIL $1"; fail=1; fi; }
 
+# The gate is decode correctness, not fidelity: this proves our software, not
+# the chip's calibration. The distribution is reported, never asserted.
+total=$(sed -n 's/.*var3 : {\(.*\)}.*/\1/p' "$work/run.log" |
+        tr ' ' '\n' | sed -n 's/.*://p' | paste -sd+ | bc 2>/dev/null || echo 0)
 check "the binary exited 0"            "[ $rc -eq 0 ]"
-check "counts include 00"              "grep -qE '\b00:' '$work/run.log'"
-check "counts include 11"              "grep -qE '\b11:' '$work/run.log'"
+check "the creg var3 came back"        "grep -q 'var3 :' '$work/run.log'"
+check "counts sum to $shots shots"     "[ \"\${total:-0}\" = $shots ]"
+if [ "$live" = 1 ]; then
+  echo "     observed: $(sed -n 's/.*var3 : {\(.*\)}.*/\1/p' "$work/run.log")"
+fi
 if [ "$live" = 0 ]; then
   check "00 == $((shots/2))"           "grep -qE '\b00:$((shots/2))\b' '$work/run.log'"
   check "11 == $((shots/2))"           "grep -qE '\b11:$((shots/2))\b' '$work/run.log'"
   check "no 01"                        "! grep -qE '\b01:' '$work/run.log'"
   check "no 10"                        "! grep -qE '\b10:' '$work/run.log'"
+  check "counts include 00 and 11"     "grep -qE '\b00:' '$work/run.log' && grep -qE '\b11:' '$work/run.log'"
   echo; echo "--- RPC log ---"; cat "$work/rpc.jsonl"
 fi
 

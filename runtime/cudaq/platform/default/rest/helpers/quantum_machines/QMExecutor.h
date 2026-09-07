@@ -42,7 +42,7 @@ struct QMSettings {
   int resetAttempts = 1;
   /// Width of one QUA int in a GetNamedResults buffer. Not restated on that
   /// RPC; see QuaResults.h.
-  std::size_t resultElementBytes = 4;
+  std::size_t resultElementBytes = 8;
   long resultTimeoutSeconds = 120;
 };
 

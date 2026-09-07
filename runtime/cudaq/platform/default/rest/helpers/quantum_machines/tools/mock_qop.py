@@ -191,7 +191,7 @@ class MockQOP:
     def _result_chunks(self):
         """Pack the configured shot outcomes into --stream-frames DataChunks.
 
-        Each shot is a length-`creg_size` array of int32, element i being clbit
+        Each shot is a length-`creg_size` array of int64, element i being clbit
         i, matching `boolean_to_int().buffer(n).save_all(name)`. Chunk
         boundaries deliberately do not align to shot boundaries: the stream
         carries a byte range, not framed records.
@@ -199,7 +199,7 @@ class MockQOP:
         blob = b""
         for bits in self.args.results:
             blob += struct.pack(
-                f"<{self.args.creg_size}i",
+                f"<{self.args.creg_size}q",
                 *[(bits >> i) & 1 for i in range(self.args.creg_size)])
         n = max(1, self.args.stream_frames)
         size = (len(blob) + n - 1) // n

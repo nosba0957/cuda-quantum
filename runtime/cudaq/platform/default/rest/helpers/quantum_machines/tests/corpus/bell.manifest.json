@@ -1,11 +1,11 @@
 {
-  "input_stream": "input_stream_angles",
+  "input_stream": "",
   "input_stream_type": "fixed",
-  "input_stream_size": 1,
+  "input_stream_size": 0,
   "angles": [],
   "angle_values": [],
   "shots": 1024,
-  "iterations": 1024,
+  "iterations": 1,
   "result_streams": [
     {
       "name": "var3",
@@ -16,5 +16,5 @@
     0,
     1
   ],
-  "bytes": 4373
+  "bytes": 4216
 }
