@@ -1,0 +1,40 @@
+// ========================================================================== //
+// Copyright (c) 2026 NVIDIA Corporation & Affiliates.                        //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+// RUN: cudaq-opt --parameter-table %s | cudaq-translate --convert-to=openqasm2 | FileCheck %s
+
+// Angles the parameter-table pass tied to the variational parameters are
+// printed as expressions of p0, p1, ...; ordinary angles stay numbers.
+
+module attributes {cudaq.variational_parameters = array<f64: 0.7, 0.3>} {
+  func.func @__nvqpp__mlirgen__qaoa(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %two = arith.constant 2.000000e+00 : f64
+    %half = arith.constant 5.000000e-01 : f64
+    %q = quake.alloca !quake.veq<2>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<2>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<2>) -> !quake.ref
+    %data = cc.stdvec_data %arg0 : (!cc.stdvec<f64>) -> !cc.ptr<!cc.array<f64 x ?>>
+    %p0ptr = cc.cast %data : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p0 = cc.load %p0ptr : !cc.ptr<f64>
+    %a0 = arith.mulf %p0, %two : f64
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%a0) %q1 : (f64, !quake.ref) -> ()
+    %p1ptr = cc.compute_ptr %data[1] : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p1 = cc.load %p1ptr : !cc.ptr<f64>
+    %m1 = arith.mulf %p1, %two : f64
+    quake.rx (%m1) %q0 : (f64, !quake.ref) -> ()
+    quake.ry (%half) %q0 : (f64, !quake.ref) -> ()
+    return
+  }
+}
+
+// CHECK: qreg var0[2];
+// CHECK: cx var0[0], var0[1];
+// CHECK: rz(2*p0) var0[1];
+// CHECK: rx(2*p1) var0[0];
+// CHECK: ry(5.000000e-01) var0[0];

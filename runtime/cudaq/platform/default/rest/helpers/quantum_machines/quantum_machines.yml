@@ -20,6 +20,9 @@ config:
   preprocessor-defines: ["-D CUDAQ_QUANTUM_DEVICE"]
   # Define the JIT lowering pipeline
   jit-mid-level-pipeline: "lower-to-cfg,decomposition{basis=h,s,t,r1,rx,ry,rz,x,y,z,x(1)},quake-to-cc-prep,func.func(expand-control-veqs,combine-quantum-alloc,canonicalize,combine-measurements)"
+  # Last, so nothing folds the placeholder angles it leaves: keeps a kernel's
+  # std::vector<double> argument open and prints its uses as p0, p1, ...
+  jit-low-level-pipeline: "parameter-table"
   # Tell the rest-qpu that we are generating OpenQASM 2.0.
   codegen-emission: qasm2
 

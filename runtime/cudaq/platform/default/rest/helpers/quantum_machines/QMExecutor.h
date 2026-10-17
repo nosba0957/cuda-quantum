@@ -7,9 +7,9 @@
  ******************************************************************************/
 
 // Executor for the quantum_machines target: drives an OPX through the QOP gRPC
-// API, compiling one QUA program per circuit *structure* and afterwards putting
-// only the rotation angles on the wire. See TODO.md, section "P3 --
-// QMExecutor".
+// API, compiling one QUA program per circuit structure and afterwards putting
+// only the variational parameters on the wire. See TODO.md, sections "P3 --
+// QMExecutor" and "P5", and GLOSSARY.md.
 
 #pragma once
 
@@ -40,9 +40,9 @@ struct QMSettings {
   int optimizationLevel = 1;
   std::string resetType = "active";
   int resetAttempts = 1;
-  /// Feed rotation angles through a QUA input stream instead of baking them
-  /// into the program. Needed only when angles change between calls; the QOP
-  /// does not currently advance input streams, so this is off by default.
+  /// Feed the variational parameters through a QUA input stream instead of
+  /// baking them into the program. The QOP does not currently advance input
+  /// streams, so this is off by default.
   bool parametric = false;
   /// Width of one QUA int in a GetNamedResults buffer. Not restated on that
   /// RPC; see QuaResults.h.
@@ -56,8 +56,11 @@ struct QMProgram {
   std::string jobId;
   std::string inputStream;
   std::size_t inputStreamSize = 1;
-  /// theta ordinals that survived transpilation, one per input-stream slot.
-  std::vector<std::size_t> angleSlots;
+  /// Variational parameter indices (the K of pK) that survived transpilation,
+  /// one per input-stream slot.
+  std::vector<std::size_t> parameterSlots;
+  /// Per slot: every coefficient is whole, so the value may be folded by 2*pi.
+  std::vector<bool> periodic;
   std::vector<std::pair<std::string, std::size_t>> resultStreams;
   std::size_t shots = 0;
   std::size_t iterations = 0;
@@ -65,14 +68,17 @@ struct QMProgram {
   std::size_t itemsConsumed = 0;
 };
 
-/// Rotation angles of a QASM2 program in instruction order, alongside the same
-/// program with those angles blanked out.
+/// A circuit structure and the values of its variational parameters. The
+/// parameter-table pass prints parametric angles as `a*pK+b`, so the QASM text
+/// itself is the structure; the values arrive in KernelExecution::user_data.
 struct QasmStructure {
   std::string structure;
-  std::vector<double> angles;
+  std::vector<double> parameters;
 };
 
-QasmStructure scanQasm(const std::string &qasm);
+/// Drops comments and whitespace, so only a real change makes a new structure.
+QasmStructure scanQasm(const std::string &qasm,
+                       std::vector<double> parameters = {});
 
 /// Folds an angle into [-pi, pi), matching qua_build.py's `_wrap`. QUA `fixed`
 /// is 4.28, so a raw optimizer proposal outside that band would overflow once
@@ -112,8 +118,9 @@ private:
   void ensureMachine();
   QMProgram &programFor(const std::string &key, const KernelExecution &code,
                         const QasmStructure &scan);
-  QMProgram buildProgram(const KernelExecution &code);
-  void pushAngles(QMProgram &program, const QasmStructure &scan);
+  QMProgram buildProgram(const KernelExecution &code,
+                         const QasmStructure &scan);
+  void pushParameters(QMProgram &program, const QasmStructure &scan);
   std::map<std::string, CountsDictionary> fetchCounts(QMProgram &program);
   std::string structuralKey(const QasmStructure &scan);
   std::string quamFingerprint();

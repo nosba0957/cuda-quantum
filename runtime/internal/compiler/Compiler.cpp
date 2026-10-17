@@ -18,6 +18,7 @@
 #include "cudaq_internal/compiler/JIT.h"
 #include "cudaq_internal/compiler/RuntimeMLIR.h"
 #include "nlohmann/json.hpp"
+#include "cudaq/Frontend/nvqpp/AttributeNames.h"
 #include "cudaq/Optimizer/Builder/Runtime.h"
 #include "cudaq/Optimizer/CodeGen/QIRAttributeNames.h"
 #include "cudaq/Optimizer/Dialect/Quake/QuakeInterfaces.h"
@@ -188,6 +189,34 @@ static bool eraseNonCallableArguments(std::span<void *const> &rawArgs,
   return isFullySpecialized;
 }
 
+/// The entry point's `std::vector<double>` argument, when the target's pipeline
+/// builds a parameter table for it and the argument is only read by element.
+/// Anything else (its size, passing it on, a second such argument) leaves it to
+/// argument synthesis as usual.
+static std::optional<unsigned>
+openParameterArgument(mlir::func::FuncOp f,
+                      const cudaq::CompileTarget &target) {
+  if (f.isDeclaration() ||
+      cudaq_internal::compiler::getPassPipeline(target).find(
+          "parameter-table") == std::string::npos)
+    return std::nullopt;
+  std::optional<unsigned> found;
+  for (auto [i, ty] : llvm::enumerate(f.getFunctionType().getInputs())) {
+    auto vecTy = dyn_cast<cudaq::cc::StdvecType>(ty);
+    if (!vecTy || !vecTy.getElementType().isF64())
+      continue;
+    if (found)
+      return std::nullopt;
+    found = i;
+  }
+  if (!found || f.getArgument(*found).use_empty())
+    return std::nullopt;
+  for (auto *user : f.getArgument(*found).getUsers())
+    if (!isa<cudaq::cc::StdvecDataOp>(user))
+      return std::nullopt;
+  return found;
+}
+
 std::tuple<mlir::ModuleOp, mlir::func::FuncOp, bool>
 cudaq_internal::compiler::Compiler::prepareModule(const std::string &kernelName,
                                                   mlir::ModuleOp m_module,
@@ -235,6 +264,20 @@ cudaq_internal::compiler::Compiler::prepareModule(const std::string &kernelName,
         isFullySpecialized =
             eraseNonCallableArguments(*rawArgs, closureArgs, epFunc);
       }
+      // Must stay in scope as `rawArgs` may point into it.
+      std::vector<void *> openArgs;
+      if (isEntryPoint && !isPython)
+        if (auto i = openParameterArgument(epFunc, *target)) {
+          // A std::vector<double> is {begin, end, capacity}, as
+          // ArgumentConverter reads it.
+          auto *vec = static_cast<const double *const *>((*rawArgs)[*i]);
+          moduleOp->setAttr(cudaq::variationalParametersAttrName,
+                            mlir::DenseF64ArrayAttr::get(
+                                contextPtr, llvm::ArrayRef(vec[0], vec[1])));
+          openArgs.assign(rawArgs->begin(), rawArgs->end());
+          openArgs[*i] = nullptr;
+          *rawArgs = openArgs;
+        }
       argCon.gen(*rawArgs);
 
       // Store kernel and substitution strings on the stack.
@@ -572,9 +615,17 @@ cudaq_internal::compiler::Compiler::emitKernelExecutions(
     if (resourceCounts)
       optionalResourceCounts = *resourceCounts;
 
+    // Values of the open variational parameters the code refers to as p0, p1...
+    nlohmann::json userData = nlohmann::json::object();
+    if (auto params = compiled_module->getOperation()
+                          ->getAttrOfType<mlir::DenseF64ArrayAttr>(
+                              cudaq::variationalParametersAttrName))
+      userData["parameters"] = std::vector<double>(params.asArrayRef().begin(),
+                                                   params.asArrayRef().end());
+
     auto mapping_reorder_idx = compiled.getMetadata().reorderIdx;
     codes.emplace_back(name, codeStr, optionalJit, optionalResourceCounts, j,
-                       mapping_reorder_idx);
+                       mapping_reorder_idx, userData);
   }
 
   return codes;

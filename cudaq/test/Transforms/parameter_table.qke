@@ -1,0 +1,93 @@
+// ========================================================================== //
+// Copyright (c) 2026 NVIDIA Corporation & Affiliates.                        //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+// RUN: cudaq-opt --parameter-table --split-input-file --verify-diagnostics %s | FileCheck %s
+
+// Affine uses: each angle becomes its constant term plus an expression, and
+// the parameters are no longer read.
+
+module attributes {cudaq.variational_parameters = array<f64: 0.7, 0.3>} {
+  func.func @__nvqpp__mlirgen__affine(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %two = arith.constant 2.000000e+00 : f64
+    %half = arith.constant 5.000000e-01 : f64
+    %q = quake.alloca !quake.veq<2>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<2>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<2>) -> !quake.ref
+    %data = cc.stdvec_data %arg0 : (!cc.stdvec<f64>) -> !cc.ptr<!cc.array<f64 x ?>>
+    %p0ptr = cc.cast %data : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p0 = cc.load %p0ptr : !cc.ptr<f64>
+    %a0 = arith.mulf %p0, %two : f64
+    quake.rz (%a0) %q0 : (f64, !quake.ref) -> ()
+    %p1ptr = cc.compute_ptr %data[1] : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p1 = cc.load %p1ptr : !cc.ptr<f64>
+    %m1 = arith.mulf %p1, %two : f64
+    %a1 = arith.addf %m1, %half : f64
+    quake.rx (%a1) %q1 : (f64, !quake.ref) -> ()
+    quake.ry (%half) %q1 : (f64, !quake.ref) -> ()
+    return
+  }
+}
+
+// CHECK-LABEL: func.func @__nvqpp__mlirgen__affine(
+// CHECK-NOT:     cc.stdvec_data
+// CHECK:         quake.rz (%{{.*}}) %{{.*}} {cudaq.parameter_exprs = ["2*p0"]}
+// CHECK:         quake.rx (%{{.*}}) %{{.*}} {cudaq.parameter_exprs = ["2*p1+0.5"]}
+// CHECK-NOT:     cudaq.parameter_exprs
+// CHECK:         return
+
+// -----
+
+// A non-affine use bakes the recorded values in instead, as argument synthesis
+// would have, and drops the module attribute so no values are sent.
+
+// CHECK-NOT: cudaq.variational_parameters
+module attributes {cudaq.variational_parameters = array<f64: 0.7>} {
+  // expected-warning @+1 {{baking them in}}
+  func.func @__nvqpp__mlirgen__fallback(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %q = quake.alloca !quake.ref
+    %data = cc.stdvec_data %arg0 : (!cc.stdvec<f64>) -> !cc.ptr<!cc.array<f64 x ?>>
+    %p0ptr = cc.cast %data : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p0 = cc.load %p0ptr : !cc.ptr<f64>
+    %sq = arith.mulf %p0, %p0 : f64
+    quake.rz (%sq) %q : (f64, !quake.ref) -> ()
+    return
+  }
+}
+
+// CHECK-LABEL: func.func @__nvqpp__mlirgen__fallback(
+// CHECK-NOT:     cc.stdvec_data
+// CHECK:         %[[V:.*]] = arith.constant 0.4899{{[0-9]*}} : f64
+// CHECK:         quake.rz (%[[V]]) %{{.*}} : (f64, !quake.ref) -> ()
+
+// -----
+
+// A parameter that also feeds classical logic is baked in as well, rather than
+// leaving a read the code emitter cannot print.
+
+module attributes {cudaq.variational_parameters = array<f64: 0.7>} {
+  // expected-warning @+1 {{baking them in}}
+  func.func @__nvqpp__mlirgen__classical(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %two = arith.constant 2.000000e+00 : f64
+    %q = quake.alloca !quake.ref
+    %data = cc.stdvec_data %arg0 : (!cc.stdvec<f64>) -> !cc.ptr<!cc.array<f64 x ?>>
+    %p0ptr = cc.cast %data : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p0 = cc.load %p0ptr : !cc.ptr<f64>
+    %a = arith.mulf %p0, %two : f64
+    quake.rz (%a) %q : (f64, !quake.ref) -> ()
+    %big = arith.cmpf ogt, %p0, %two : f64
+    cc.if(%big) {
+      quake.x %q : (!quake.ref) -> ()
+    }
+    return
+  }
+}
+
+// CHECK-LABEL: func.func @__nvqpp__mlirgen__classical(
+// CHECK-NOT:     cc.stdvec_data
+// CHECK-NOT:     cudaq.parameter_exprs
+// CHECK:         quake.rz (%{{.*}}) %{{.*}} : (f64, !quake.ref) -> ()

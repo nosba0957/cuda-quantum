@@ -27,4 +27,15 @@ static constexpr const char deviceCallAttrName[] = "cudaq-devicecall";
 static constexpr const char generatorAnnotation[] =
     "user_custom_quantum_operation";
 
+/// Module attribute holding the values of an entry point's open variational
+/// parameters (its `std::vector<double>` argument left out of argument
+/// synthesis). Consumed by the `parameter-table` pass.
+static constexpr const char variationalParametersAttrName[] =
+    "cudaq.variational_parameters";
+
+/// Attribute on a quantum operator naming, per parameter operand, the affine
+/// expression of the variational parameters it stands for (`2*p0+0.5`), or ""
+/// when the operand is an ordinary constant. Printed by code emitters.
+static constexpr const char parameterExprsAttrName[] = "cudaq.parameter_exprs";
+
 } // namespace cudaq

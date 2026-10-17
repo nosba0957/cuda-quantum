@@ -1033,6 +1033,29 @@ def ObserveAnsatz : Pass<"observe-ansatz", "mlir::func::FuncOp"> {
   ];
 }
 
+def ParameterTable : Pass<"parameter-table", "mlir::ModuleOp"> {
+  let summary = "Record the rotation angles that depend on open parameters.";
+  let description = [{
+    Runs on a module whose entry point kept its `std::vector<double>` argument
+    out of argument synthesis, with the argument's values recorded in the
+    `cudaq.variational_parameters` module attribute. Loops must already be
+    unrolled.
+
+    If every read of that argument feeds a rotation angle of the form
+    `a * params[k] + b`, each such angle is replaced by the constant `b` and
+    the operator is tagged with `cudaq.parameter_exprs`, e.g. `["2*p0"]`, for a
+    code emitter to print in its place. The circuit then no longer depends on
+    the parameter values, so a target can compile it once and send only the
+    values.
+
+    Otherwise the recorded values are substituted for the reads, exactly as
+    argument synthesis would have done, the module attribute is removed, and a
+    warning says every evaluation will be a separate compile.
+  }];
+
+  let dependentDialects = ["cudaq::cc::CCDialect", "mlir::arith::ArithDialect"];
+}
+
 def PhaseFolding: Pass<"phase-folding", "mlir::func::FuncOp"> {
   let summary = "Perform phase based rotation merging.";
 

@@ -96,9 +96,15 @@ already uses). After unrolling, a new pass traces each rotation angle back to
 the open argument and requires the form `a * params[k] + b`. It emits:
 
 - the circuit structure: the QASM with each such angle printed as a named
-  expression of the parameters, e.g. `rz(2*p0)`, and
-- the parameter table: per open parameter, the gates it feeds and their `a`,
-  `b`. It travels to the executor in `KernelExecution::user_data`.
+  expression of the parameters, e.g. `rz(2*p0)` — which *is* the parameter
+  table, carried inline, so the two cannot drift apart; and
+- the parameter values, in `KernelExecution::user_data["parameters"]`.
+
+(As built, 2026-10-17: the pass tags each operator with
+`cudaq.parameter_exprs` and the OpenQASM emitter prints the tag. It runs as
+the `quantum_machines` target's `jit-low-level-pipeline`, after everything that
+could fold its placeholder angles. `Compiler.cpp` leaves the argument open only
+when that pipeline names the pass.)
 
 If any use of the open argument is not of that form (a branch, a loop bound,
 `sin(gamma)`, `gamma*beta`), the kernel is re-synthesised with the argument
@@ -225,11 +231,13 @@ on them.
   different programs, run back to back, both served by streams initialised
   once. If the OPX side cannot rebind, OPNIC is limited to one circuit structure
   per process and selecting it for a second structure is an error.
-- **Fixed-point range.** QUA `fixed` is 4.28, so `|a*p + b|` must stay under 8.
-  Wrapping `p` to [-π, π) is not enough when `a = 2` and the transpiler adds a
-  constant `b` of π. P5a must confirm which form the QuAM rotation macros use
-  and either wrap on the OPX or emit the angle in turns, where overflow loses
-  only whole turns.
+- ~~**Fixed-point range.**~~ Retired in P5a. After transpiling to the chip's
+  basis, only `rz` carries a parameter, and QuAM's rz macro is a bare
+  `frame_rotation`. `qua_build.py` now emits `frame_rotation_2pi` with the
+  angle in turns, where an overflow loses only whole turns, and the manifest
+  marks each parameter `periodic` when all its coefficients are whole, so the
+  executor may fold the value it pushes into [-π, π). A parameter with a
+  fractional coefficient and |p| ≥ 8 is a clear error.
 
 ## Out of Scope
 

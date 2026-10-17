@@ -1,0 +1,29 @@
+{
+  "input_stream": "input_stream_angles",
+  "input_stream_type": "fixed",
+  "input_stream_size": 2,
+  "angles": [
+    "p0",
+    "p1"
+  ],
+  "periodic": [
+    true,
+    true
+  ],
+  "shots": 1024,
+  "iterations": 1024,
+  "result_streams": [
+    {
+      "name": "var6",
+      "size": 5
+    }
+  ],
+  "qubits": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "bytes": 14343
+}

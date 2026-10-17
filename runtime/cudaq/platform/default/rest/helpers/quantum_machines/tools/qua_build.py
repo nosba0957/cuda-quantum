@@ -7,7 +7,11 @@
 # the terms of the Apache License 2.0 which accompanies this distribution.     #
 # ============================================================================ #
 
-"""OpenQASM 2.0 on stdin -> serialized parametric QuaProgram on stdout."""
+"""OpenQASM 2.0 on stdin -> serialized QuaProgram on stdout.
+
+Angles printed as `a*pK+b` become runtime parameters fed by a QUA input
+stream, unless --bind bakes values in.
+"""
 
 import argparse
 import json
@@ -16,7 +20,12 @@ import os
 import re
 import sys
 
-_ROT = {"rz", "rx", "ry", "p", "u1", "rzz", "crz", "crx", "cry", "cu1"}
+# The parameter-table pass prints an angle that depends on the kernel's open
+# variational parameters as `a*pK` or `a*pK+b`; qasm2 cannot parse that.
+_EXPR = re.compile(r"^\s*(-?[0-9.eE+-]+)\*p(\d+)(?:\+(-?[0-9.eE+-]+))?\s*$")
+_ARGS = re.compile(r"^(\s*[A-Za-z_]\w*\s*)\(([^()]*)\)")
+# ponytail: sentinels assume no real angle is near 1e6 rad.
+_SENTINEL = 1.0e6
 
 # CUDA-Q emits `measure <qreg> -> <creg>[k];` when the qreg holds one qubit,
 # which qiskit.qasm2 rejects as an unresolvable broadcast.
@@ -39,36 +48,64 @@ def normalize_qasm(text):
     return "\n".join(out) + "\n"
 
 
-def parameterize(qc):
-    """Replace every rotation angle with a fresh Parameter, in instruction order.
+def parametric_qasm(text):
+    """Swap each printed parameter expression for a unique sentinel number.
 
-    A Parameter's index is its ordinal among rotation angles as they appear in
-    the QASM, which is exactly what the C++ side gets for free when it blanks
-    those angles to compute the structural cache key.
+    Returns the parseable text and {sentinel: (k, a, b)} so the expressions can
+    be put back once qiskit has built the circuit.
     """
+    exprs = {}
+    out = []
+    for line in text.splitlines():
+        m = _ARGS.match(line)
+        if m and "p" in m.group(2):
+            args = []
+            for tok in m.group(2).split(","):
+                e = _EXPR.match(tok)
+                if not e:
+                    if "p" in tok:
+                        raise SystemExit(f"unparseable parameter expression {tok!r}")
+                    args.append(tok)
+                    continue
+                s = _SENTINEL + len(exprs)
+                exprs[s] = (int(e.group(2)), float(e.group(1)), float(e.group(3) or 0))
+                args.append(repr(s))
+            line = f"{m.group(1)}({','.join(args)}){line[m.end():]}"
+        out.append(line)
+    return "\n".join(out) + "\n", exprs
+
+
+def attach_parameters(qc, exprs):
+    """Replace sentinel angles with `a * Parameter("pK") + b`."""
     from qiskit.circuit import Parameter
 
+    params = {}
     out = qc.copy_empty_like()
-    values = []
     for inst in qc.data:
         op = inst.operation
-        if op.name in _ROT and op.params:
+        if any(isinstance(v, float) and v in exprs for v in op.params):
             new = []
             for v in op.params:
-                new.append(Parameter(f"theta_{len(values)}"))
-                values.append(float(v))
+                if isinstance(v, float) and v in exprs:
+                    k, a, b = exprs[v]
+                    v = a * params.setdefault(k, Parameter(f"p{k}")) + b
+                new.append(v)
             op = op.copy()
             op.params = new
         out.append(op, inst.qubits, inst.clbits)
-    return out, values
+    return out
 
 
-def _wrap(x):
-    return (x + math.pi) % (2 * math.pi) - math.pi
+def _index(p):
+    return int(p.name[1:])
 
 
-def expr_to_qua(expr, param_map):
-    """Affine ParameterExpression -> QUA arithmetic over fixed variables."""
+def _wrap(x, period=2 * math.pi):
+    return (x + period / 2) % period - period / 2
+
+
+def affine(expr):
+    """Affine ParameterExpression -> (constant, {Parameter: coefficient})."""
     # Parameters are matched by equality, not identity: transpile() returns
     # expressions whose Parameter members compare equal to the originals but
     # are different objects.
@@ -76,26 +113,47 @@ def expr_to_qua(expr, param_map):
     zero = {p: 0.0 for p in present}
     const = float(expr.bind(zero))
 
-    coeffs = []
-    for qp, var in param_map.items():
-        if qp not in present:
-            continue
+    coeffs = {}
+    for qp in present:
         unit = {p: (1.0 if p == qp else 0.0) for p in present}
         c = float(expr.bind(unit)) - const
         if abs(c) > 1e-12:
-            coeffs.append((qp, var, c))
+            coeffs[qp] = c
 
     probe = {p: 0.37 + 0.11 * i for i, p in enumerate(sorted(present, key=str))}
-    model = const + sum(c * probe[qp] for qp, _, c in coeffs)
+    model = const + sum(c * probe[qp] for qp, c in coeffs.items())
     if abs(float(expr.bind(probe)) - model) > 1e-9:
         raise ValueError(f"angle expression is not affine in its parameters: {expr}")
+    return const, coeffs
 
-    # fixed is 4.28, so |value| must stay under 8 rad; rz is 2*pi periodic, so
-    # folding the constant term keeps the runtime sum in range.
-    out = _wrap(const)
-    for _, var, c in coeffs:
-        out = out + c * var
+
+def expr_to_qua(expr, param_map, period=2 * math.pi):
+    """Affine ParameterExpression -> QUA arithmetic over fixed variables.
+
+    fixed is 4.28, so |value| must stay under 8; the expression is periodic in
+    `period`, so folding the constant term keeps the runtime sum in range.
+    """
+    const, coeffs = affine(expr)
+    out = _wrap(const, period)
+    for qp, c in coeffs.items():
+        out = out + c * param_map[qp]
     return out
+
+
+def periodic(qc, params):
+    """Per parameter: are all its coefficients whole numbers?
+
+    Then shifting it by 2*pi shifts every angle by whole turns, so the C++ side
+    may fold the value it pushes into [-pi, pi) to fit fixed.
+    """
+    whole = {p: True for p in params}
+    for inst in qc.data:
+        for v in inst.operation.params:
+            if getattr(v, "parameters", None):
+                for p, c in affine(v)[1].items():
+                    if abs(c - round(c)) > 1e-9:
+                        whole[p] = False
+    return [whole[p] for p in params]
 
 
 def emit_circuit(qc, machine, param_map):
@@ -131,6 +189,13 @@ def emit_circuit(qc, machine, param_map):
             qubit.align()
 
         params = list(op.params)
+        if name == "rz" and getattr(params[0], "parameters", None):
+            # What the rz macro does, but in turns: 2*gamma plus a transpiler
+            # pi can pass 8 rad and overflow fixed, while an overflow in turns
+            # drops only whole turns.
+            qubit.xy.frame_rotation_2pi(
+                expr_to_qua(params[0] / (2 * math.pi), param_map, period=1.0))
+            continue
         if params and isinstance(params[0], ParameterExpression):
             params[0] = (expr_to_qua(params[0], param_map)
                          if params[0].parameters else _wrap(float(params[0])))
@@ -254,8 +319,9 @@ def main(argv=None):
     ap.add_argument("--optimization-level", type=int, default=1)
     ap.add_argument("--stream-name", default="angles",
                     help="client input stream; its RPC name is 'input_stream_<this>'")
-    ap.add_argument("--static", action="store_true",
-                    help="bake the QASM angles in instead of streaming them")
+    ap.add_argument("--bind", default=None,
+                    help="comma-separated values for p0, p1, ...: bake them in "
+                    "instead of streaming them")
     ap.add_argument("--state-path", default=None)
     ap.add_argument("--caps-file", default=None,
                     help="a qua_config.pb.caps.json; without it capabilities are "
@@ -284,7 +350,8 @@ def main(argv=None):
     set_capabilities(args.caps_file, machine)
 
     text = open(args.qasm).read() if args.qasm else sys.stdin.read()
-    qc = qasm2.loads(normalize_qasm(text))
+    text, exprs = parametric_qasm(normalize_qasm(text))
+    qc = attach_parameters(qasm2.loads(text), exprs)
     if not qc.cregs:
         raise SystemExit("circuit has no classical register, nothing to measure")
 
@@ -301,9 +368,12 @@ def main(argv=None):
         if args.reset_type == "thermalize":
             reset.thermalize_time = machine.active_qubits[i].thermalization_time
 
-    angle_values = []
-    if not args.static:
-        qc, angle_values = parameterize(qc)
+    if args.bind is not None:
+        values = [float(v) for v in args.bind.split(",") if v.strip()]
+        missing = [p.name for p in qc.parameters if _index(p) >= len(values)]
+        if missing:
+            raise SystemExit(f"--bind has {len(values)} values; {missing} unbound")
+        qc = qc.assign_parameters({p: values[_index(p)] for p in qc.parameters})
 
     qc = transpile(qc,
                    target=create_target(machine),
@@ -312,7 +382,7 @@ def main(argv=None):
     if not has_reset_at_boundary(qc):
         qc = ensure_resets_for_active_qubits(qc)
 
-    params = sorted(qc.parameters, key=lambda p: int(p.name.split("_")[1]))
+    params = sorted(qc.parameters, key=_index)
     prog = build(qc, machine, params, args.shots, args.iterations, args.stream_name)
 
     pb = prog.qua_program
@@ -334,7 +404,7 @@ def main(argv=None):
         "input_stream_type": "fixed",
         "input_stream_size": len(params),
         "angles": [p.name for p in params],
-        "angle_values": [angle_values[int(p.name.split("_")[1])] for p in params],
+        "periodic": periodic(qc, params),
         "shots": args.shots,
         "iterations": args.iterations if params else 1,
         "result_streams": [{"name": c.name, "size": c.size} for c in qc.cregs],

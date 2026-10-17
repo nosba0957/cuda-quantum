@@ -24,7 +24,6 @@
 #include <fstream>
 #include <future>
 #include <iomanip>
-#include <set>
 #include <sstream>
 #include <thread>
 
@@ -33,15 +32,6 @@ namespace pb = ::qm::grpc::v2;
 namespace cudaq {
 
 namespace {
-
-/// The rotation op names qua_build.py's `parameterize` assigns theta slots to.
-/// Kept identical to its `_ROT`: the k-th angle here must be the k-th angle
-/// there, or streamed values land on the wrong gates.
-const std::set<std::string> &rotations() {
-  static const std::set<std::string> names = {
-      "rz", "rx", "ry", "p", "u1", "rzz", "crz", "crx", "cry", "cu1"};
-  return names;
-}
 
 std::string readFile(const std::string &path) {
   std::ifstream in(path, std::ios::binary);
@@ -57,45 +47,6 @@ std::string squeeze(const std::string &s) {
   for (char c : s)
     if (!std::isspace(static_cast<unsigned char>(c)))
       out.push_back(c);
-  return out;
-}
-
-std::string trim(const std::string &s) {
-  const auto b = s.find_first_not_of(" \t\r\n");
-  if (b == std::string::npos)
-    return "";
-  return s.substr(b, s.find_last_not_of(" \t\r\n") - b + 1);
-}
-
-double parseAngle(const std::string &token, const std::string &gate) {
-  const std::string t = trim(token);
-  const char *begin = t.c_str();
-  char *end = nullptr;
-  const double v = std::strtod(begin, &end);
-  if (end == begin || *end != '\0')
-    throw std::runtime_error(
-        "quantum_machines: gate '" + gate + "' has a non-numeric angle '" + t +
-        "'; angles must be plain numbers so they can be streamed");
-  return v;
-}
-
-std::vector<std::string> splitTopLevel(const std::string &s, char sep) {
-  std::vector<std::string> out;
-  int depth = 0;
-  std::string current;
-  for (char c : s) {
-    if (c == '(' || c == '[')
-      ++depth;
-    else if (c == ')' || c == ']')
-      --depth;
-    if (c == sep && depth == 0) {
-      out.push_back(current);
-      current.clear();
-    } else {
-      current.push_back(c);
-    }
-  }
-  out.push_back(current);
   return out;
 }
 
@@ -182,8 +133,10 @@ double wrapAngle(double radians) {
   return radians - twoPi * std::floor((radians + M_PI) / twoPi);
 }
 
-QasmStructure scanQasm(const std::string &qasm) {
+QasmStructure scanQasm(const std::string &qasm,
+                       std::vector<double> parameters) {
   QasmStructure out;
+  out.parameters = std::move(parameters);
   std::string text;
   for (std::size_t i = 0; i < qasm.size();) {
     if (qasm[i] == '/' && i + 1 < qasm.size() && qasm[i + 1] == '/') {
@@ -193,60 +146,7 @@ QasmStructure scanQasm(const std::string &qasm) {
       text.push_back(qasm[i++]);
     }
   }
-
-  std::size_t pos = 0;
-  while (pos < text.size()) {
-    const auto end = text.find(';', pos);
-    if (end == std::string::npos)
-      break;
-    const std::string stmt = trim(text.substr(pos, end - pos));
-    pos = end + 1;
-    if (stmt.empty())
-      continue;
-
-    std::size_t n = 0;
-    while (
-        n < stmt.size() &&
-        (std::isalnum(static_cast<unsigned char>(stmt[n])) || stmt[n] == '_'))
-      ++n;
-    const std::string name = stmt.substr(0, n);
-
-    if (name == "OPENQASM" || name == "include" || name == "qreg" ||
-        name == "creg" || name == "barrier" || name == "measure" ||
-        name == "reset") {
-      out.structure += squeeze(stmt) + ";";
-      continue;
-    }
-    if (name.empty() || name == "gate" || name == "opaque" || name == "if")
-      throw std::runtime_error(
-          "quantum_machines: unsupported OpenQASM statement '" + stmt + "'");
-
-    std::size_t p = n;
-    while (p < stmt.size() && std::isspace(static_cast<unsigned char>(stmt[p])))
-      ++p;
-    if (p >= stmt.size() || stmt[p] != '(') {
-      out.structure += squeeze(stmt) + ";";
-      continue;
-    }
-
-    const auto close = stmt.rfind(')');
-    if (close == std::string::npos || close < p)
-      throw std::runtime_error("quantum_machines: unbalanced parentheses in '" +
-                               stmt + "'");
-    if (!rotations().count(name))
-      throw std::runtime_error(
-          "quantum_machines: parameterized gate '" + name +
-          "' is outside qua_build.py's rotation set, so streamed angles would "
-          "be misaligned with the compiled program");
-
-    const auto params = splitTopLevel(stmt.substr(p + 1, close - p - 1), ',');
-    out.structure += name + "(";
-    for (std::size_t k = 0; k < params.size(); ++k) {
-      out.angles.push_back(parseAngle(params[k], name));
-      out.structure += k ? ",?" : "?";
-    }
-    out.structure += ")" + squeeze(stmt.substr(close + 1)) + ";";
-  }
+  out.structure = squeeze(text);
   return out;
 }
 
@@ -382,13 +282,12 @@ std::string QMExecutor::quamFingerprint() {
 
 std::string QMExecutor::structuralKey(const QasmStructure &scan) {
   std::ostringstream ss;
-  // Baked-in angles are part of the compiled program, so two circuits that
-  // differ only in an angle are different programs. Blanking them is correct
-  // only when they arrive over the input stream.
+  // Baked-in parameters are part of the compiled program, so two evaluations
+  // differ in program as well as in values unless the values are streamed.
   if (!config.parametric) {
     ss << std::setprecision(17);
-    for (double angle : scan.angles)
-      ss << angle << ',';
+    for (double value : scan.parameters)
+      ss << value << ',';
     ss << '|';
   }
   ss << scan.structure << "|shots=" << shots
@@ -505,7 +404,8 @@ void QMExecutor::waitUntilRunning(const std::string &jobId) {
   }
 }
 
-QMProgram QMExecutor::buildProgram(const KernelExecution &code) {
+QMProgram QMExecutor::buildProgram(const KernelExecution &code,
+                                   const QasmStructure &scan) {
   const auto dir = std::filesystem::path(config.tempDir) /
                    ("cudaq-qm-" + fnv1a(code.name + code.code));
   std::filesystem::create_directories(dir);
@@ -526,8 +426,13 @@ QMProgram QMExecutor::buildProgram(const KernelExecution &code) {
       << " --optimization-level " << config.optimizationLevel
       << " --reset-type " << shellQuote(config.resetType)
       << " --reset-max-attempts " << config.resetAttempts;
-  if (!config.parametric)
-    cmd << " --static";
+  if (!config.parametric && !scan.parameters.empty()) {
+    std::ostringstream values;
+    values << std::setprecision(17);
+    for (std::size_t k = 0; k < scan.parameters.size(); ++k)
+      values << (k ? "," : "") << scan.parameters[k];
+    cmd << " --bind " << shellQuote(values.str());
+  }
   if (!config.capsPath.empty())
     cmd << " --caps-file " << shellQuote(config.capsPath);
   if (!config.statePath.empty())
@@ -555,10 +460,10 @@ QMProgram QMExecutor::buildProgram(const KernelExecution &code) {
   program.inputStreamSize = manifest.at("input_stream_size").get<std::size_t>();
   program.shots = manifest.at("shots").get<std::size_t>();
   program.iterations = manifest.at("iterations").get<std::size_t>();
-  for (const auto &name : manifest.at("angles")) {
-    const std::string theta = name.get<std::string>();
-    program.angleSlots.push_back(std::stoul(theta.substr(theta.find('_') + 1)));
-  }
+  for (const auto &name : manifest.at("angles"))
+    program.parameterSlots.push_back(
+        std::stoul(name.get<std::string>().substr(1)));
+  program.periodic = manifest.at("periodic").get<std::vector<bool>>();
   for (const auto &stream : manifest.at("result_streams"))
     program.resultStreams.emplace_back(stream.at("name").get<std::string>(),
                                        stream.at("size").get<std::size_t>());
@@ -596,15 +501,15 @@ QMProgram &QMExecutor::programFor(const std::string &key,
                                   const QasmStructure &scan) {
   auto it = cache.find(key);
   if (it == cache.end())
-    it = cache.emplace(key, buildProgram(code)).first;
+    it = cache.emplace(key, buildProgram(code, scan)).first;
 
   QMProgram &program = it->second;
-  for (std::size_t slot : program.angleSlots)
-    if (slot >= scan.angles.size())
+  for (std::size_t slot : program.parameterSlots)
+    if (slot >= scan.parameters.size())
       throw std::runtime_error(
-          "quantum_machines: the cached program wants angle theta_" +
-          std::to_string(slot) + " but this circuit only has " +
-          std::to_string(scan.angles.size()));
+          "quantum_machines: the program reads parameter p" +
+          std::to_string(slot) + " but this evaluation has only " +
+          std::to_string(scan.parameters.size()));
 
   // A job serves `iterations` pushes and then ends. Requeueing the already
   // compiled program costs one RPC and keeps Compile off the hot path.
@@ -639,9 +544,9 @@ QMProgram &QMExecutor::programFor(const std::string &key,
   return program;
 }
 
-void QMExecutor::pushAngles(QMProgram &program, const QasmStructure &scan) {
+void QMExecutor::pushParameters(QMProgram &program, const QasmStructure &scan) {
   if (program.inputStream.empty()) {
-    // No angles, so no stream gates the job: it runs its shots on start.
+    // Nothing streamed, so no stream gates the job: it runs its shots on start.
     ++program.pushes;
     return;
   }
@@ -649,12 +554,20 @@ void QMExecutor::pushAngles(QMProgram &program, const QasmStructure &scan) {
   request.set_job_id(program.jobId);
   request.set_stream_name(program.inputStream);
   auto *data = request.mutable_fixed_stream_data();
-  for (std::size_t slot : program.angleSlots)
-    data->add_data(wrapAngle(scan.angles[slot]));
-  // qua_build.py declares a one-element stream even when nothing survived, so
-  // every batch is gated by exactly one push.
-  if (program.angleSlots.empty())
-    data->add_data(0.0);
+  for (std::size_t i = 0; i < program.parameterSlots.size(); ++i) {
+    double value = scan.parameters[program.parameterSlots[i]];
+    // Whole coefficients make a 2*pi shift invisible to every angle.
+    if (i < program.periodic.size() && program.periodic[i])
+      value = wrapAngle(value);
+    if (std::abs(value) >= 8.0)
+      throw std::runtime_error(
+          "quantum_machines: parameter p" +
+          std::to_string(program.parameterSlots[i]) + " = " +
+          std::to_string(value) +
+          " does not fit QUA fixed (|x| < 8) and cannot be folded, because "
+          "an angle uses it with a fractional coefficient");
+    data->add_data(value);
+  }
   if (static_cast<std::size_t>(data->data_size()) != program.inputStreamSize)
     throw std::runtime_error("quantum_machines: pushing " +
                              std::to_string(data->data_size()) +
@@ -815,9 +728,12 @@ detail::future QMExecutor::execute(std::vector<KernelExecution> &codesToExecute,
           CUDAQ_WARN("quantum_machines: kernel {} carries a mapping reorder "
                      "index, which this target does not apply",
                      code.name);
-        const auto scan = scanQasm(code.code);
+        std::vector<double> parameters;
+        if (const auto &ud = code.user_data.get(); ud.contains("parameters"))
+          parameters = ud.at("parameters").get<std::vector<double>>();
+        const auto scan = scanQasm(code.code, std::move(parameters));
         auto &program = programFor(structuralKey(scan), code, scan);
-        pushAngles(program, scan);
+        pushParameters(program, scan);
         auto counts = fetchCounts(program);
 
         if (single && !isObserve) {

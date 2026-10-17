@@ -50,12 +50,20 @@ translateOperatorName(cudaq::quake::OperatorInterface optor, StringRef &name) {
 }
 
 static LogicalResult printParameters(cudaq::Emitter &emitter,
-                                     ValueRange parameters) {
+                                     ValueRange parameters,
+                                     ArrayAttr exprs = {}) {
   if (parameters.empty())
     return success();
   emitter.os << '(';
   auto isFailure = false;
+  unsigned i = 0;
   llvm::interleaveComma(parameters, emitter.os, [&](Value value) {
+    // An angle the parameter-table pass tied to the variational parameters.
+    if (exprs && i < exprs.size())
+      if (auto expr = cast<StringAttr>(exprs[i++]); !expr.empty()) {
+        emitter.os << expr.getValue();
+        return;
+      }
     auto parameter = cudaq::getParameterValueAsDouble(value);
     if (!parameter.has_value()) {
       isFailure = true;
@@ -312,7 +320,9 @@ static LogicalResult emitOperation(cudaq::Emitter &emitter,
   } else
     emitter.os << name;
 
-  if (failed(printParameters(emitter, optor.getParameters())))
+  if (failed(printParameters(
+          emitter, optor.getParameters(),
+          optor->getAttrOfType<ArrayAttr>(cudaq::parameterExprsAttrName))))
     return optor.emitError("failed to emit parameters");
 
   if (!optor.getControls().empty()) {

@@ -11,12 +11,12 @@
 The real builder needs qiskit, quam and the host venv, none of which exist in
 the container the HTTP/2 curl lives in. This honours the same subprocess
 contract -- flags in, `--output` bytes and a `--manifest` JSON out -- deriving
-the manifest from the QASM the way `parameterize` does, and dispensing the
-corpus QuaProgram named by $STUB_QUA_PROGRAM so the mock still parses a genuine
+the manifest from the `pK` parameters in the QASM, and dispensing the corpus
+QuaProgram named by $STUB_QUA_PROGRAM so the mock still parses a genuine
 program.
 
-The manifest field this cannot fake is which theta slots survive transpilation;
-p3_checks covers that against the real builder's checked-in manifests.
+What this cannot fake is which parameters survive transpilation and whether
+their coefficients are whole; it reports every parameter, periodic.
 """
 
 import argparse
@@ -25,7 +25,7 @@ import os
 import re
 import sys
 
-ROT = {"rz", "rx", "ry", "p", "u1", "rzz", "crz", "crx", "cry", "cu1"}
+PARAM = re.compile(r"\*p(\d+)")
 GATE = re.compile(r"^\s*([A-Za-z_]\w*)\s*(\(([^)]*)\))?")
 CREG = re.compile(r"^\s*creg\s+([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]\s*$")
 
@@ -43,10 +43,11 @@ def main():
     ap.add_argument("--reset-max-attempts", type=int, default=1)
     ap.add_argument("--caps-file")
     ap.add_argument("--state-path")
+    ap.add_argument("--bind")
     args = ap.parse_args()
 
     text = re.sub(r"//[^\n]*", "", open(args.qasm).read())
-    angles, cregs = [], []
+    cregs = []
     for stmt in text.split(";"):
         m = GATE.match(stmt)
         if not m:
@@ -55,21 +56,20 @@ def main():
         if creg:
             cregs.append({"name": creg.group(1), "size": int(creg.group(2))})
             continue
-        if m.group(3) is not None and m.group(1) in ROT:
-            angles += [float(v) for v in m.group(3).split(",")]
     if not cregs:
         raise SystemExit("stub_qua_build: no creg in the QASM")
 
     program = os.environ["STUB_QUA_PROGRAM"]
     open(args.output, "wb").write(open(program, "rb").read())
+    params = [] if args.bind else sorted({int(k) for k in PARAM.findall(text)})
     manifest = {
-        "input_stream": f"input_stream_{args.stream_name}",
+        "input_stream": f"input_stream_{args.stream_name}" if params else "",
         "input_stream_type": "fixed",
-        "input_stream_size": max(len(angles), 1),
-        "angles": [f"theta_{i}" for i in range(len(angles))],
-        "angle_values": angles,
+        "input_stream_size": len(params),
+        "angles": [f"p{k}" for k in params],
+        "periodic": [True] * len(params),
         "shots": args.shots,
-        "iterations": args.iterations,
+        "iterations": args.iterations if params else 1,
         "result_streams": cregs,
         "qubits": [],
         "bytes": 0,

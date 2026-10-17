@@ -7,9 +7,10 @@
  ****************************************************************************/
 
 // Runnable checks for QMExecutor. The headline one is the P3 gate: two
-// cudaq::sample-shaped calls that differ only in rotation angles must produce
-// one Compile RPC and two PushToInputStream RPCs, asserted against the mock
-// QOP's RPC log rather than against timing.
+// cudaq::sample-shaped calls that differ only in their variational parameters
+// must produce one Compile RPC and two PushToInputStream RPCs carrying just
+// those parameters, asserted against the mock QOP's RPC log rather than
+// against timing.
 //
 // Build and run via tests/run_p3_checks.sh.
 
@@ -19,6 +20,7 @@
 #include "nlohmann/json.hpp"
 #include "qm_min.pb.h"
 
+#include <algorithm>
 #include <cassert>
 #include <cmath>
 #include <fstream>
@@ -54,29 +56,22 @@ std::string option(int argc, char **argv, const std::string &flag,
   return fallback;
 }
 
-/// Rewrites qaoa_p1's gamma (every rz) and beta (every rx), leaving everything
-/// else -- and therefore the structure -- untouched.
-std::string respin(const std::string &qasm, double gamma, double beta) {
-  auto sub = [](const std::string &text, const std::string &gate, double v) {
-    std::ostringstream value;
-    value << gate << "(" << std::scientific << v << ")";
-    return std::regex_replace(text, std::regex(gate + R"(\([^)]*\))"),
-                              value.str());
-  };
-  return sub(sub(qasm, "rz", gamma), "rx", beta);
-}
-
 std::string dropLastRotation(const std::string &qasm) {
   const auto at = qasm.rfind("rx(");
   const auto end = qasm.find('\n', at);
   return qasm.substr(0, at) + qasm.substr(end + 1);
 }
 
-cudaq::KernelExecution kernel(const std::string &name,
-                              const std::string &code) {
+/// What the compiler hands the executor for a kernel whose parameter-table
+/// pass left `params` open: QASM printing them as pK, and their values.
+cudaq::KernelExecution kernel(const std::string &name, const std::string &code,
+                              std::vector<double> params = {}) {
   std::vector<std::size_t> reorder;
-  return cudaq::KernelExecution(name, code, std::nullopt, std::nullopt,
-                                reorder);
+  json names, userData = json::object();
+  if (!params.empty())
+    userData["parameters"] = params;
+  return cudaq::KernelExecution(name, code, std::nullopt, std::nullopt, names,
+                                reorder, userData);
 }
 
 struct RpcLog {
@@ -133,68 +128,52 @@ void checkAngleFolding() {
   std::cout << "ok   angle folding: every value lands in [-pi, pi)\n";
 }
 
-/// The contract between the two halves: theta_k is the k-th rotation angle in
-/// QASM instruction order. Checked against the manifests the *real*
-/// qua_build.py wrote for the corpus, so a divergence in either scanner shows
-/// up here.
+/// The contract between the two halves: the builder streams exactly the pK
+/// the QASM names, in K order. Checked against the manifests the *real*
+/// qua_build.py wrote for the corpus.
 void checkAgainstCorpusManifests(const std::string &corpus) {
-  const char *names[] = {"bell", "cz_pair", "qaoa_p1", "rz_sweep", "sx_chain"};
+  const char *names[] = {"bell",       "cz_pair",  "qaoa_p1",
+                         "qaoa_param", "rz_sweep", "sx_chain"};
   for (const char *name : names) {
     const auto qasm = readFile(corpus + "/" + name + ".qasm");
     const auto manifest =
         json::parse(readFile(corpus + "/" + name + ".manifest.json"));
-    const auto scan = cudaq::scanQasm(qasm);
-
-    const auto &angles = manifest.at("angles");
-    const auto &values = manifest.at("angle_values");
-    expectEq(angles.size(), values.size(),
-             std::string(name) + ": manifest angles vs values");
-    for (std::size_t i = 0; i < angles.size(); ++i) {
-      const std::string theta = angles[i].get<std::string>();
-      const std::size_t k = std::stoul(theta.substr(theta.find('_') + 1));
-      expect(k < scan.angles.size(),
-             std::string(name) + ": " + theta + " is out of range");
-      // The QASM carries ~7 significant figures; the manifest carries the
-      // parsed double, so they agree only to that.
-      expect(std::abs(scan.angles[k] - values[i].get<double>()) < 1e-6,
-             std::string(name) + ": " + theta + " is not the " +
-                 std::to_string(k) + "-th QASM angle");
-    }
-    expectEq(scan.angles.size() >= angles.size() ? 1 : 0, 1,
-             std::string(name) + ": scanned fewer angles than survived");
-    std::cout << "ok   " << name << ": " << scan.angles.size()
-              << " rotation angles, " << angles.size()
-              << " streamed, ordinals agree with qua_build.py\n";
+    std::vector<std::string> named;
+    const std::regex param(R"(\*p(\d+))");
+    for (std::sregex_iterator it(qasm.begin(), qasm.end(), param), end;
+         it != end; ++it)
+      if (std::find(named.begin(), named.end(), "p" + (*it)[1].str()) ==
+          named.end())
+        named.push_back("p" + (*it)[1].str());
+    std::sort(named.begin(), named.end());
+    const auto streamed = manifest.at("angles").get<std::vector<std::string>>();
+    expect(streamed == named,
+           std::string(name) + ": the builder streams exactly the QASM's pK");
+    expectEq(manifest.at("periodic").size(), streamed.size(),
+             std::string(name) + ": one periodic flag per parameter");
+    std::cout << "ok   " << name << ": " << streamed.size()
+              << " parameters streamed, as named in the QASM\n";
   }
 }
 
 void checkStructuralKey(const std::string &corpus) {
-  const auto qaoa = readFile(corpus + "/qaoa_p1.qasm");
-  const auto a = cudaq::scanQasm(respin(qaoa, 1.4, 0.6));
-  const auto b = cudaq::scanQasm(respin(qaoa, 1.1, 0.9));
-  const auto c = cudaq::scanQasm(dropLastRotation(qaoa));
+  const auto qaoa = readFile(corpus + "/qaoa_param.qasm");
+  const auto a = cudaq::scanQasm(qaoa, {0.7, 0.3});
+  const auto b = cudaq::scanQasm("// another comment\n" + qaoa, {0.55, 0.45});
+  const auto c = cudaq::scanQasm(dropLastRotation(qaoa), {0.7, 0.3});
 
   expect(a.structure == b.structure,
-         "circuits differing only in angles share a structure");
-  expect(a.angles != b.angles, "the angles themselves still differ");
+         "evaluations differing only in parameters share a structure");
+  expect(a.parameters != b.parameters, "the parameters themselves differ");
   expect(a.structure != c.structure,
          "dropping a rotation changes the structure");
-  expect(a.structure.find("rz(?)") != std::string::npos,
-         "rotation angles are blanked in the structure");
-  expect(a.structure.find("1.4") == std::string::npos,
-         "no angle literal survives into the structure");
-  expect(cudaq::scanQasm(readFile(corpus + "/bell.qasm")).angles.empty(),
-         "bell has no rotation angles");
-
-  bool threw = false;
-  try {
-    cudaq::scanQasm("qreg q[1];\ncreg c[1];\nu3(0.1,0.2,0.3) q[0];\n");
-  } catch (const std::exception &) {
-    threw = true;
-  }
-  expect(threw, "a parameterized gate outside qua_build.py's set is rejected");
-  std::cout << "ok   structural key: angles blanked, arity kept, unknown "
-               "parameterized gates rejected\n";
+  expect(a.structure.find("0.7") == std::string::npos,
+         "no parameter value is part of the structure");
+  expect(cudaq::scanQasm(readFile(corpus + "/qaoa_p1.qasm")).structure !=
+             cudaq::scanQasm(readFile(corpus + "/rz_sweep.qasm")).structure,
+         "different circuits, different structures");
+  std::cout << "ok   structural key: parameters out, comments and whitespace "
+               "ignored\n";
 }
 
 void checkRegistration() {
@@ -237,13 +216,13 @@ cudaq::sample_result run(cudaq::QMExecutor &executor,
 }
 
 void checkGate(const std::string &corpus, const std::string &logPath) {
-  const auto qaoa = readFile(corpus + "/qaoa_p1.qasm");
+  const auto qaoa = readFile(corpus + "/qaoa_param.qasm");
   cudaq::QMExecutor executor;
   executor.setShots(4);
 
-  auto first = run(executor, {kernel("qaoa", respin(qaoa, 1.4, 0.6))},
+  auto first = run(executor, {kernel("qaoa", qaoa, {0.7, 0.3})},
                    cudaq::detail::ExecutionContextType::sample);
-  auto second = run(executor, {kernel("qaoa", respin(qaoa, 1.1, 0.9))},
+  auto second = run(executor, {kernel("qaoa", qaoa, {0.55, 7.0})},
                     cudaq::detail::ExecutionContextType::sample);
 
   expectEq(first.to_map().size(), 4, "first call returns four distinct shots");
@@ -266,18 +245,16 @@ void checkGate(const std::string &corpus, const std::string &logPath) {
       expect(push.at("stream_name") == "input_stream_angles",
              "the mangled input-stream name is used");
       expect(push.at("data_kind") == "fixed_stream_data", "fixed payload");
-      expectEq(push.at("values").size(), 9, "nine slots, one per rotation");
+      expectEq(push.at("values").size(), 2,
+               "two values, one per parameter, not one per gate");
     }
     const auto a = pushes[0].at("values").get<std::vector<double>>();
     const auto b = pushes[1].at("values").get<std::vector<double>>();
-    for (int i = 0; i < 4; ++i) {
-      expect(std::abs(a[i] - 1.4) < 1e-6, "push 1 slot " + std::to_string(i));
-      expect(std::abs(b[i] - 1.1) < 1e-6, "push 2 slot " + std::to_string(i));
-    }
-    for (int i = 4; i < 9; ++i) {
-      expect(std::abs(a[i] - 0.6) < 1e-6, "push 1 slot " + std::to_string(i));
-      expect(std::abs(b[i] - 0.9) < 1e-6, "push 2 slot " + std::to_string(i));
-    }
+    expect(std::abs(a[0] - 0.7) < 1e-6 && std::abs(a[1] - 0.3) < 1e-6,
+           "push 1 carries p0, p1");
+    expect(std::abs(b[0] - 0.55) < 1e-6 &&
+               std::abs(b[1] - (7.0 - 2 * M_PI)) < 1e-6,
+           "push 2 folds a periodic 7.0 into fixed range");
     const auto fetches = log.of("GetNamedResults");
     expect(!fetches[0].at("ranges")[0].is_null(),
            "GetNamedResults carries a range");
@@ -285,21 +262,22 @@ void checkGate(const std::string &corpus, const std::string &logPath) {
              "the range covers exactly this batch's shots");
     expectEq(fetches[1].at("ranges")[0][0].get<std::size_t>(), 4,
              "the second batch starts where the first stopped");
-    std::cout << "ok   GATE: 1 Compile, 2 PushToInputStream, angles land in "
-                 "slot order\n";
+    std::cout << "ok   GATE: 1 Compile, 2 PushToInputStream of 2 parameters "
+                 "each\n";
   }
 
   // A structurally different circuit is a cache miss and compiles again.
-  run(executor, {kernel("qaoa8", dropLastRotation(respin(qaoa, 1.4, 0.6)))},
+  run(executor, {kernel("qaoa8", dropLastRotation(qaoa), {0.7, 0.3})},
       cudaq::detail::ExecutionContextType::sample);
   {
     const RpcLog log(logPath);
     expectEq(log.count("Compile"), 2, "a new structure compiles again");
-    expectEq(log.count("PushToInputStream"), 3, "and pushes its own angles");
+    expectEq(log.count("PushToInputStream"), 3,
+             "and pushes its own parameters");
     expectEq(log.count("OpenQuantumMachine"), 1,
              "but the quantum machine is opened only once");
-    expectEq(log.of("PushToInputStream")[2].at("values").size(), 8,
-             "the shorter circuit pushes eight slots");
+    expectEq(log.of("PushToInputStream")[2].at("values").size(), 2,
+             "the shorter circuit still reads both parameters");
     std::cout << "ok   cache miss: a different structure recompiles, the same "
                  "one never does\n";
   }
@@ -307,10 +285,10 @@ void checkGate(const std::string &corpus, const std::string &logPath) {
 
   // Every entry of codesToExecute is submitted -- the bug the cloud helper's
   // createJob has, where only circuitCodes[0] is sent.
-  auto observed = run(executor,
-                      {kernel("term0", respin(qaoa, 0.2, 0.3)),
-                       kernel("term1", respin(qaoa, 0.4, 0.5))},
-                      cudaq::detail::ExecutionContextType::observe);
+  auto observed = run(
+      executor,
+      {kernel("term0", qaoa, {0.2, 0.3}), kernel("term1", qaoa, {0.4, 0.5})},
+      cudaq::detail::ExecutionContextType::observe);
   expectEq(observed.register_names().size(), 2, "both terms come back");
   expectEq(observed.to_map("term0").size(), 4, "term0 has counts");
   expectEq(observed.to_map("term1").size(), 4, "term1 has counts");
@@ -320,9 +298,9 @@ void checkGate(const std::string &corpus, const std::string &logPath) {
     expectEq(log.count("PushToInputStream"), 5, "one push per term");
     const auto pushes = log.of("PushToInputStream");
     expect(std::abs(pushes[3].at("values")[0].get<double>() - 0.2) < 1e-6,
-           "term0's angles");
+           "term0's parameters");
     expect(std::abs(pushes[4].at("values")[0].get<double>() - 0.4) < 1e-6,
-           "term1's angles");
+           "term1's parameters");
     std::cout << "ok   multi-term: all of codesToExecute is submitted\n";
   }
 

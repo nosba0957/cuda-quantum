@@ -652,8 +652,11 @@ paths.
   fine for hundreds of evals.
 
 Next, specified in `.scratch/p5-parameter-transport/spec.md` (ADR 0001):
-- [ ] **P5a** — parameter table pass; one `Compile` and 2 values per push on
-      the mock with `--qm-parametric`.
+- [x] **P5a** — parameter table pass; one `Compile` and 2 values per push on
+      the mock with `--qm-parametric` (2026-10-17, `run_p5_checks.sh`). The
+      per-gate theta slots and `scanQasm`'s angle blanking are gone; the corpus
+      gains `qaoa_param`. Two `UnitarySynthesis/random_unitary-*` lit tests fail
+      in this tree; they exercise none of the changed passes.
 - [ ] **P5b** — `cudaq::max_cut(n, seed)`, networkx-identical graphs, NLopt
       bounds + initial step fixed.
 - [ ] **P5c** — OPNIC transport via `libopnic`; spike on stream

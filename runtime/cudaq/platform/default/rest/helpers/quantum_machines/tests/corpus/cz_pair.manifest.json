@@ -3,7 +3,7 @@
   "input_stream_type": "fixed",
   "input_stream_size": 0,
   "angles": [],
-  "angle_values": [],
+  "periodic": [],
   "shots": 1024,
   "iterations": 1,
   "result_streams": [
