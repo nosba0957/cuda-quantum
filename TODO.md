@@ -632,14 +632,39 @@ paths.
 - **Gate:** `cudaq::sample` returns counts from the QOP.
 
 ### P5 — QAOA
-- [ ] Prefer `cudaq::sample` + classical cost over `cudaq::observe` — the cost
+- [x] Prefer `cudaq::sample` + classical cost over `cudaq::observe` — the cost
       Hamiltonian is diagonal, and it dodges the multi-circuit path entirely.
-- **Gate:** COBYLA loop converges, and the RPC log shows one `Compile` for the
-  whole optimization.
+- [x] `tests/p5_qaoa.cpp`: Max-Cut on a 5-ring, host-side COBYLA, expected cut
+      from counts (same shape as `experiments-ethernet/qaoa_with_opt.py`). The
+      ring's (4,0) edge is not a 5q4c coupler, so qiskit routes it.
+- [x] `tests/run_p5_checks.sh` passes on the mock (2026-10-17): 6 evals,
+      6 `Compile`, 0 pushes, final sample at the best angles is a cache hit.
+      ~3-4 s per eval offline, mostly the `qua_build.py` subprocess.
+- [ ] `run_p5_checks.sh --live` on as-qpu-5q4c.
+- **Gate (amended 2026-10-17):** the COBYLA loop closes on the instrument —
+  every evaluation returns the requested shots and the run ends cleanly.
+  Convergence is reported, not asserted (calibration, as in P4).
+  **One `Compile` per optimization is dropped** while input streams do not
+  advance (see the P4 notes): angles are baked in, so every new angle set is a
+  new compile. `--qm-parametric` restores the original gate once the QOP does.
+- Known ceilings: QASM2 prints angles to 7 significant digits, so COBYLA steps
+  finer than that collapse onto one program; the structure cache never evicts,
+  fine for hundreds of evals.
+
+Next, specified in `.scratch/p5-parameter-transport/spec.md` (ADR 0001):
+- [ ] **P5a** — parameter table pass; one `Compile` and 2 values per push on
+      the mock with `--qm-parametric`.
+- [ ] **P5b** — `cudaq::max_cut(n, seed)`, networkx-identical graphs, NLopt
+      bounds + initial step fixed.
+- [ ] **P5c** — OPNIC transport via `libopnic`; spike on stream
+      re-initialisation first.
 
 ### P6 — native C++ emitter (optional endgame)
 - [ ] Port QuaProgram construction + the QuAM macro layer to C++, deleting the
       `qua_build.py` subprocess.
+- [ ] A QUA dialect in MLIR, so the parameter-transport receive instructions
+      are emitted by a pass rather than added by `qua_build.py` (deferred
+      2026-10-17: the Python helper adds them for now).
 - **Gate:** byte-exact against the P1 goldens on every corpus file.
       **`QuaProgram` is byte-deterministic (verified over 6 runs), so this holds.
       `QuaConfig` is NOT** — protobuf map ordering varies per run, so never hash or
