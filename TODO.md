@@ -657,8 +657,20 @@ Next, specified in `.scratch/p5-parameter-transport/spec.md` (ADR 0001):
       per-gate theta slots and `scanQasm`'s angle blanking are gone; the corpus
       gains `qaoa_param`. Two `UnitarySynthesis/random_unitary-*` lit tests fail
       in this tree; they exercise none of the changed passes.
-- [ ] **P5b** — `cudaq::max_cut(n, seed)`, networkx-identical graphs, NLopt
-      bounds + initial step fixed.
+- [x] **P5b** — `cudaq::max_cut(n, seed)`, networkx-identical graphs, NLopt
+      bounds + initial step fixed (2026-10-17). `targettests/execution/
+      max_cut.cpp` pins 12 graphs and the initial parameters against networkx
+      3.4.2 / numpy. On quantum_machines + mock: 1 Compile, 2 values per push.
+      **Found:** with the script's defaults, p=1 on the simulator reaches the
+      optimum on 8/10 five-vertex graphs at one shot-noise seed, but on graph
+      seed 1 only 3/8 shot-noise seeds do: COBYLA wanders on the noisy
+      objective and spends all 100 evaluations. Not asserted; a quality
+      question for the user.
+      **Found:** `experiments-ethernet/qaoa_with_opt.py` scores the wrong graph.
+      Its bitstrings are MSB-first (`qiskit_to_qua.py:213`, and Aer's counts),
+      so `bitstring[i]` is qubit n-1-i, while the circuit puts vertex i on qubit
+      i. CUDA-Q's bitstring[i] is qubit i, so `max_cut` is unaffected, but the
+      two stacks disagree on any graph that is not symmetric under i -> n-1-i.
 - [ ] **P5c** — OPNIC transport via `libopnic`; spike on stream
       re-initialisation first.
 

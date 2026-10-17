@@ -65,6 +65,8 @@ double nlopt_wrapper_call(const std::vector<double> &x,
     _opt.set_upper_bounds(upperBounds);                                        \
     _opt.set_maxeval(maxeval);                                                 \
     _opt.set_ftol_rel(tol);                                                    \
+    if (step_size)                                                             \
+      _opt.set_initial_step(*step_size);                                       \
     double optF;                                                               \
     try {                                                                      \
       _opt.optimize(x, optF);                                                  \

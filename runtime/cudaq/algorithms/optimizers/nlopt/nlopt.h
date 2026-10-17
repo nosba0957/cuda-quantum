@@ -22,6 +22,9 @@ public:
   std::optional<std::vector<double>> lower_bounds;
   std::optional<std::vector<double>> upper_bounds;
   std::optional<double> f_tol;
+  /// Initial step for derivative-free methods; COBYLA's `rhobeg`. NLopt picks
+  /// one from the bounds and the starting point when it is not given.
+  std::optional<double> step_size;
 };
 
 #define CUDAQ_NLOPT_ALGORITHM_TYPE(NAME, NEEDS_GRADIENTS)                      \
