@@ -44,6 +44,10 @@ public:
   /// with. The real OPX knows from its program, so the card ignores this.
   virtual void expect(std::size_t shots, std::size_t packets) {}
 
+  /// Blocks until the OPX side of both streams is up, so it is called after
+  /// the job that declares them is queued, never before.
+  virtual void sync() = 0;
+
   /// Sends one evaluation's parameters, zero-padded to OpnicMaxParams.
   virtual void send(const std::vector<double> &params) = 0;
 

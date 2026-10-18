@@ -614,6 +614,10 @@ QMProgram &QMExecutor::programFor(const std::string &key,
       throw std::runtime_error("quantum_machines: AddCompiledToQueue failed: " +
                                response.error().details());
     program.jobId = response.success().job_id();
+    // The card's handshake waits for the OPX side, which only exists once
+    // the job runs: syncing before queueing would wait forever.
+    if (program.opnicPackets)
+      opnic->sync();
     // Only a push needs the job running. A stream-free job may already be
     // PROCESSING by the time we could ask.
     if (!program.inputStream.empty() || program.opnicPackets)

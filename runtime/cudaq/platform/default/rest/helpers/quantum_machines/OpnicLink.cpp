@@ -162,7 +162,6 @@ class SdkLink : public OpnicLink {
 public:
   SdkLink(std::uint16_t toOpx, std::uint16_t fromOpx, const std::string &serial,
           const std::string &fakeResults, const std::string &fakeLog) {
-    std::shared_ptr<::qm::stream::Configurator> configurator;
     std::shared_ptr<::qm::stream::Context> context;
     if (fakeResults.empty()) {
       auto handlers = ::qm::stream::make_device_handlers(serial);
@@ -180,7 +179,6 @@ public:
       throw std::runtime_error(
           "quantum_machines: could not initialise the OPNIC streams " +
           std::to_string(toOpx) + " and " + std::to_string(fromOpx));
-    configurator->sync();
   }
 
   ~SdkLink() override {
@@ -193,6 +191,8 @@ public:
     if (fake)
       fake->expect(shots, packets);
   }
+
+  void sync() override { configurator->sync(); }
 
   void send(const std::vector<double> &values) override {
     if (values.size() > OpnicMaxParams)
@@ -224,6 +224,7 @@ public:
 private:
   // Declared first, destroyed last: the streams' deleters still use it.
   std::shared_ptr<FakeOpx> fake;
+  std::shared_ptr<::qm::stream::Configurator> configurator;
   ::qm::stream_ptr<ResultStream> results;
   ::qm::stream_ptr<ParamStream> params;
 };

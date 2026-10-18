@@ -11,6 +11,8 @@
 #
 #   bash run_p5_checks.sh [args]          mock QOP, no hardware touched
 #   bash run_p5_checks.sh --live [args]   REAL OPX1000: opens a machine, plays pulses
+#   P5_SRC=tests/p5c_live.cpp bash run_p5_checks.sh --live [args]
+#       the P5c live programs instead (see that file); live only
 #
 # args go to the binary first, so --maxeval/--layers/--qm-* override defaults.
 # Offline it runs three times: Ethernet (baked, a compile per evaluation),
@@ -28,6 +30,7 @@ py="${PY:-$hostroot/.venv/bin/python}"
 state="${QUAM_STATE_PATH:-$hostroot/as-qpu-5q4c}"
 port="${MOCK_PORT:-9518}"
 shots=1024
+src="${P5_SRC:-tests/p5_qaoa.cpp}"
 
 live=0
 [ "${1:-}" = "--live" ] && { live=1; shift; }
@@ -88,8 +91,10 @@ run_qaoa() {
   set -e
   evals=$(grep -c '^eval ' "$work/run.log" || true)
   check "binary exited 0"               "[ $rc -eq 0 ]"
-  check "COBYLA evaluated the cost"     "[ ${evals:-0} -ge 2 ]"
-  check "the loop reported a best cut"  "grep -q '^best cut=' '$work/run.log'"
+  if [ "$src" = tests/p5_qaoa.cpp ]; then
+    check "COBYLA evaluated the cost"     "[ ${evals:-0} -ge 2 ]"
+    check "the loop reported a best cut"  "grep -q '^best cut=' '$work/run.log'"
+  fi
   echo "     $evals evaluations in ${elapsed}s"
 }
 
@@ -98,7 +103,7 @@ docker run --rm -v "$root":/workspace -v "$work":/work \
   -w /workspace/"${qmdir#$root/}" "$img" bash -lc '
   { apt-get update -qq && apt-get install -y -qq libprotobuf-dev; } > /dev/null 2>&1
   /workspace/build/bin/nvq++ --target quantum_machines \
-    --quantum_machines-url unused tests/p5_qaoa.cpp -o /work/qaoa.out
+    --quantum_machines-url unused '"$src"' -o /work/qaoa.out
   chown '"$(id -u):$(id -g)"' /work/qaoa.out'
 
 if [ "$live" = 1 ]; then
@@ -109,6 +114,7 @@ if [ "$live" = 1 ]; then
   # cut values are reported, never asserted, live.
   run_qaoa "$@"
 else
+  [ "$src" = tests/p5_qaoa.cpp ] || { echo "P5_SRC is live only"; exit 2; }
   endpoint="127.0.0.1:$port"
   cluster="mock"
   results=$("$py" -c "print(','.join(['01010','00000']*($shots//2)))")
