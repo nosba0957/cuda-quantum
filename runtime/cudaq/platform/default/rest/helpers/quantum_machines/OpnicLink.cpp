@@ -168,6 +168,41 @@ private:
   std::uint64_t doorbell = 0, status = 0;
 };
 
+/// One handle's configurator: pins on that handle's context, as the card's
+/// does when it sets a stream up, then hands the stream to the shared OPX.
+class FakePort : public ::qm::stream::Configurator {
+public:
+  FakePort(std::shared_ptr<FakeOpx> opx, std::shared_ptr<FakeContext> context)
+      : opx(std::move(opx)), context(std::move(context)) {}
+
+  ::qm::stream::IncomingStreamParams setup_incoming_stream(
+      std::uint16_t id, ::qm::StreamType type, std::uint32_t *pi,
+      std::uint32_t *buffer, std::size_t size, std::size_t packet,
+      std::size_t allocation,
+      std::vector<::qm::signature::SignatureEntry> signature) override {
+    context->pin_buffers({});
+    return opx->setup_incoming_stream(id, type, pi, buffer, size, packet,
+                                      allocation, std::move(signature));
+  }
+  ::qm::stream::OutgoingStreamParams setup_outgoing_stream(
+      std::uint16_t id, ::qm::StreamType type, std::uint32_t *buffer,
+      std::size_t size, std::size_t packet, std::size_t allocation,
+      std::vector<::qm::signature::SignatureEntry> signature) override {
+    context->pin_buffers({});
+    return opx->setup_outgoing_stream(id, type, buffer, size, packet,
+                                      allocation, std::move(signature));
+  }
+  void teardown_stream(std::uint16_t id,
+                       ::qm::StreamDirection direction) override {
+    opx->teardown_stream(id, direction);
+  }
+  void sync() override { opx->sync(); }
+
+private:
+  std::shared_ptr<FakeOpx> opx;
+  std::shared_ptr<FakeContext> context;
+};
+
 class SdkLink : public OpnicLink {
 public:
   SdkLink(std::uint16_t toOpx, std::uint16_t fromOpx, const std::string &serial,
@@ -177,7 +212,8 @@ public:
     auto handlers = [&]() -> ::qm::stream::DeviceHandlers {
       if (!fake)
         return ::qm::stream::make_device_handlers(serial);
-      return {std::make_shared<FakeContext>(), fake};
+      auto context = std::make_shared<FakeContext>();
+      return {context, std::make_shared<FakePort>(fake, context)};
     };
     if (!fakeResults.empty())
       fake = std::make_shared<FakeOpx>(fakeResults, fakeLog);
@@ -204,6 +240,8 @@ public:
       fake->expect(shots, packets);
   }
 
+  // The handshake is per card (the SDK's qm::sync(serial)), so either
+  // stream's handle covers both.
   void sync() override { configurator->sync(); }
 
   void send(const std::vector<double> &values) override {

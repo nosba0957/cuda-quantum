@@ -616,17 +616,29 @@ QMProgram &QMExecutor::programFor(const std::string &key,
       throw std::runtime_error("quantum_machines: AddCompiledToQueue failed: " +
                                response.error().details());
     program.jobId = response.success().job_id();
-    // The card's handshake waits for the OPX side, which only exists once
-    // the job runs: syncing before queueing would wait forever.
-    if (program.opnicPackets)
-      opnic->sync();
-    // Only a push needs the job running. A stream-free job may already be
-    // PROCESSING by the time we could ask.
-    if (!program.inputStream.empty() || program.opnicPackets)
-      waitUntilRunning(program.jobId);
+    // Tracked from here, so closeLocked cancels it whatever happens next.
     active = &program;
     program.pushes = 0;
     program.itemsConsumed = 0;
+    try {
+      // Only a push needs the job running. A stream-free job may already be
+      // PROCESSING by the time we could ask. Running also means a job
+      // cancelled above has stopped, since a machine runs one job at a time.
+      if (!program.inputStream.empty() || program.opnicPackets)
+        waitUntilRunning(program.jobId);
+      // The card's handshake waits for the OPX side, which exists only once
+      // the job runs; waiting for that first bounds it by waitUntilRunning's
+      // deadline. The handshake itself has no timeout in QM's SDK.
+      if (program.opnicPackets)
+        opnic->sync();
+    } catch (...) {
+      try {
+        cancelJob(program);
+      } catch (const std::exception &e) {
+        CUDAQ_WARN("quantum_machines: {}", e.what());
+      }
+      throw;
+    }
     CUDAQ_INFO("quantum_machines: queued program {} as job {}",
                program.programId, program.jobId);
   }
@@ -747,6 +759,10 @@ QMExecutor::fetchCounts(QMProgram &program) {
 
   const auto deadline = std::chrono::steady_clock::now() +
                         std::chrono::seconds(config.resultTimeoutSeconds);
+  // Registration takes a moment, not minutes: a name still missing after this
+  // is wrong, and fails with the QOP's own message.
+  const auto registered =
+      std::chrono::steady_clock::now() + std::chrono::seconds(15);
   auto complete = [&] {
     for (const auto &entry : decoders)
       if (entry.second->pendingShots() < program.shots)
@@ -807,7 +823,7 @@ QMExecutor::fetchCounts(QMProgram &program) {
     // error frame.
     auto notYet = [&](const std::string &described) {
       if (described.find("cannot find result") == std::string::npos ||
-          std::chrono::steady_clock::now() > deadline)
+          std::chrono::steady_clock::now() > registered)
         return false;
       std::this_thread::sleep_for(std::chrono::milliseconds(200));
       return true;

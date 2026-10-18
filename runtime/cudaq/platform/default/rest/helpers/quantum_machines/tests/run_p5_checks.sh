@@ -34,6 +34,7 @@ src="${P5_SRC:-tests/p5_qaoa.cpp}"
 
 live=0
 [ "${1:-}" = "--live" ] && { live=1; shift; }
+[ "$live" = 1 ] || [ "$src" = tests/p5_qaoa.cpp ] || { echo "P5_SRC is live only"; exit 2; }
 
 work="$(mktemp -d)"
 cleanup() { [ -n "${mock_pid:-}" ] && kill "$mock_pid" 2>/dev/null; rm -rf "$work" 2>/dev/null; return 0; }
@@ -105,6 +106,7 @@ echo "### nvq++"
 docker run --rm -v "$root":/workspace -v "$work":/work \
   -w /workspace/"${qmdir#$root/}" "$img" bash -lc '
   { apt-get update -qq && apt-get install -y -qq libprotobuf-dev; } > /dev/null 2>&1
+  set -e
   /workspace/build/bin/nvq++ --target quantum_machines \
     --quantum_machines-url unused '"$src"' -o /work/qaoa.out
   [ '"$live"' = 1 ] || /workspace/build/bin/nvq++ --target quantum_machines \
@@ -119,7 +121,6 @@ if [ "$live" = 1 ]; then
   # cut values are reported, never asserted, live.
   run_qaoa "$@"
 else
-  [ "$src" = tests/p5_qaoa.cpp ] || { echo "P5_SRC is live only"; exit 2; }
   endpoint="127.0.0.1:$port"
   cluster="mock"
   results=$("$py" -c "print(','.join(['01010','00000']*($shots//2)))")
