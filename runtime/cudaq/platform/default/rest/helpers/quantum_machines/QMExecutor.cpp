@@ -19,6 +19,7 @@
 #include <cctype>
 #include <chrono>
 #include <cmath>
+#include <cstdio>
 #include <cstdlib>
 #include <dlfcn.h>
 #include <filesystem>
@@ -381,8 +382,9 @@ void QMExecutor::ensureMachine() {
         "quantum_machines: the QOP rejected the QuaConfig" + detail);
   }
   machineId = response.success().quantum_machine_id();
-  CUDAQ_INFO("quantum_machines: opened quantum machine {} ({} byte config)",
-             machineId, configBlob.size());
+  // Always printed: the cluster is shared, and this is how a leftover machine
+  // is told apart from another group's.
+  std::fprintf(stderr, "quantum_machines: opened %s\n", machineId.c_str());
 }
 
 void QMExecutor::openQuantumMachine() {
@@ -422,7 +424,7 @@ void QMExecutor::closeLocked() {
   if (!status.ok())
     throw std::runtime_error("quantum_machines: Close failed for " + closed +
                              ": " + status.describe());
-  CUDAQ_INFO("quantum_machines: closed quantum machine {}", closed);
+  std::fprintf(stderr, "quantum_machines: closed %s\n", closed.c_str());
 }
 
 void QMExecutor::waitUntilRunning(const std::string &jobId) {
