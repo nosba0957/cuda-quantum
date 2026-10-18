@@ -26,6 +26,12 @@ provided by the CUDA-Q toolkit, including the `nvq++` compiler, the CUDA-Q
 runtime, as well as a selection of integrated CPU and GPU backends for rapid
 application development and testing.
 
+## This fork: CUDA-Q on a Quantum Machines OPX1000
+
+This branch adds a `quantum_machines` target that drives a bare OPX1000, with
+QAOA Max-Cut in one call and parameters over Ethernet or QM's OPNIC card. See
+[its README](runtime/cudaq/platform/default/rest/helpers/quantum_machines/README.md).
+
 ## Getting Started
 
 To learn more about how to work with CUDA-Q, please take a look at the [CUDA-Q
