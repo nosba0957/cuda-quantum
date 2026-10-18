@@ -227,10 +227,10 @@ on them.
   for this reason). So the executor initialises each stream ID **once per
   process**, with packet types of fixed size (parameters padded to a maximum
   count, results in fixed-size packets), and every circuit structure's program
-  declares the same IDs and types. P5c starts with a spike on `gh1`: two
-  different programs, run back to back, both served by streams initialised
-  once. If the OPX side cannot rebind, OPNIC is limited to one circuit structure
-  per process and selecting it for a second structure is an error.
+  declares the same IDs and types. **Retired 2026-10-18** by a live spike on
+  `gh1` (ticket 01): two different programs, run back to back, were both
+  served by streams initialised once, so OPNIC serves any number of circuit
+  structures per process.
 - ~~**Fixed-point range.**~~ Retired in P5a. After transpiling to the chip's
   basis, only `rz` carries a parameter, and QuAM's rz macro is a bare
   `frame_rotation`. `qua_build.py` now emits `frame_rotation_2pi` with the

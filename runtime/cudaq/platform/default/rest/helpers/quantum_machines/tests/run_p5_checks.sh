@@ -66,7 +66,8 @@ if [ -f /usr/lib/libopnic.so.1.0.0 ]; then
     opnic_mounts+=(--device /dev/opnic0 -v /run/opnic:/run/opnic)
 fi
 
-# Runs the binary with the given arguments in front of the defaults.
+# Runs the binary ($bin, default qaoa.out) with the given arguments in front
+# of the defaults.
 run_qaoa() {
   set +e
   local start; start=$(date +%s)
@@ -79,7 +80,7 @@ run_qaoa() {
   command -v protoc > /dev/null || \
     { apt-get update -qq && apt-get install -y -qq libprotobuf-dev; } > /dev/null 2>&1
   mkdir -p /work/qmtmp
-  /work/qaoa.out "$@" \
+  /work/'"${bin:-qaoa.out}"' "$@" \
     --qm-endpoint "$endpoint" --qm-cluster "$cluster" \
     --qm-config tests/qua_config.pb \
     --qm-builder tools/qua_build.py --qm-python "$py" \
@@ -93,7 +94,7 @@ run_qaoa() {
   set -e
   evals=$(grep -c '^eval ' "$work/run.log" || true)
   check "binary exited 0"               "[ $rc -eq 0 ]"
-  if [ "$src" = tests/p5_qaoa.cpp ]; then
+  if [ "${bin:-qaoa.out}" = qaoa.out ] && [ "$src" = tests/p5_qaoa.cpp ]; then
     check "COBYLA evaluated the cost"     "[ ${evals:-0} -ge 2 ]"
     check "the loop reported a best cut"  "grep -q '^best cut=' '$work/run.log'"
   fi
@@ -106,7 +107,9 @@ docker run --rm -v "$root":/workspace -v "$work":/work \
   { apt-get update -qq && apt-get install -y -qq libprotobuf-dev; } > /dev/null 2>&1
   /workspace/build/bin/nvq++ --target quantum_machines \
     --quantum_machines-url unused '"$src"' -o /work/qaoa.out
-  chown '"$(id -u):$(id -g)"' /work/qaoa.out'
+  [ '"$live"' = 1 ] || /workspace/build/bin/nvq++ --target quantum_machines \
+    --quantum_machines-url unused tests/p5c_live.cpp -o /work/live.out
+  chown '"$(id -u):$(id -g)"' /work/*.out'
 
 if [ "$live" = 1 ]; then
   endpoint="${QM_ENDPOINT:-10.21.19.201:9514}"
@@ -158,6 +161,16 @@ else
     "\"$py\" -c 'import json,sys; p=[json.loads(l) for l in open(sys.argv[1])]; sys.exit(0 if p and all(len(v)==16 and not any(v[2:]) and any(v[:2]) for v in p) else 1)' '$work/opnic.jsonl'"
   check "the job left waiting for parameters is cancelled" \
     "grep -q 'JobService/Cancel' '$work/rpc.jsonl'"
+
+  echo; echo "### OPNIC, fake link: two circuit structures on streams initialised once"
+  start_mock
+  bin=live.out run_qaoa --spike --qm-transport-opnic --qm-opnic-fake "$results" "$@"
+  check "both structures returned their shots" "grep -q '^spike passed' '$work/run.log'"
+  c=$(compiles)
+  check "a Compile per structure ($c)" "[ $c -eq 2 ]"
+  cancels=$(grep -c 'JobService/Cancel' "$work/rpc.jsonl" || true)
+  check "the first job cancelled before the second, the second at close ($cancels)" \
+    "[ $cancels -eq 2 ]"
 fi
 
 echo

@@ -7,8 +7,16 @@
 
 **Blocked by:** 01 (Live spike: one OPNIC stream setup serves two programs)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] An offline check covers the second-structure case on the fake card (works, or errors clearly)
-- [ ] The single-structure OPNIC run and the Ethernet and streamed transports still pass the P5 checks
-- [ ] The spec's risk note and TODO record the outcome
+- [x] An offline check covers the second-structure case on the fake card (works, or errors clearly)
+- [x] The single-structure OPNIC run and the Ethernet and streamed transports still pass the P5 checks
+- [x] The spec's risk note and TODO record the outcome
+
+## Comments
+
+**2026-10-18:** the spike said streams rebind, so the second structure simply
+works; no error path is needed. `run_p5_checks.sh` gains an offline mode that
+runs `tests/p5c_live.cpp --spike` over the fake card: both structures return
+their shots, one Compile each, the first job cancelled before the second is
+queued and the second at close. The other three modes still pass.

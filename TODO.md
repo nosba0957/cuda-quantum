@@ -688,8 +688,13 @@ Next, specified in `.scratch/p5-parameter-transport/spec.md` (ADR 0001):
     `/usr/lib/libopnic.so.1.0.0` mounted; live also `--device /dev/opnic0`.
     Packets are fixed: 16 parameters out, 128 shots x 5 bits back (a full
     4 KB slot), so OPNIC programs measure at most 5 bits.
-  - [ ] **Live spike, on the user's instrument time:** streams initialised
-        once must serve two different programs back to back.
+  - [x] **Live spike** (2026-10-18, QPX1000_4): streams initialised once
+        serve two different programs back to back. Live needed `/run/opnic`
+        mounted and one driver handle per stream (the driver pins once per
+        fd), and `qm::sync()` after the job is queued, not before. Offline,
+        `run_p5_checks.sh` runs the two-structure spike over the fake card.
+        The chip's readout gave stuck bits on Ethernet and OPNIC alike
+        (qubit 0 always 0, qubit 1 always 1): calibration, not transport.
   - [ ] Live gate: `max_cut(5, seed)` over OPNIC, 100 evaluations, one
         compile, machine released.
 
