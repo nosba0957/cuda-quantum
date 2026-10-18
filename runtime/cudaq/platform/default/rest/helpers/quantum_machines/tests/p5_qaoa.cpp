@@ -43,7 +43,7 @@ static int intArg(int argc, char **argv, const char *flag, int fallback) {
   return fallback;
 }
 
-int main(int argc, char **argv) {
+static int run(int argc, char **argv) {
   const int n = 5, shots = 1024;
   const int layers = intArg(argc, argv, "--layers", 1);
   const std::vector<int> u = {0, 1, 2, 3, 4}, v = {1, 2, 3, 4, 0};
@@ -83,4 +83,15 @@ int main(int argc, char **argv) {
               -best, evals);
   cudaq::sample(shots, qaoa, params, u, v, n, layers).dump();
   return 0;
+}
+
+// An escaping exception would skip the executor's cleanup at exit, leaving a
+// job waiting on the OPX and the quantum machine open.
+int main(int argc, char **argv) {
+  try {
+    return run(argc, argv);
+  } catch (const std::exception &e) {
+    std::fprintf(stderr, "error: %s\n", e.what());
+    return 1;
+  }
 }

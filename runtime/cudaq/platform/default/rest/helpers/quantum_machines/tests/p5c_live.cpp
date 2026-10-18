@@ -48,7 +48,7 @@ static bool hasFlag(int argc, char **argv, const char *flag) {
   return false;
 }
 
-int main(int argc, char **argv) {
+static int run(int argc, char **argv) {
   if (hasFlag(argc, argv, "--spike")) {
     const int shots = 128;
     auto check = [&](const char *name, const cudaq::sample_result &counts) {
@@ -77,4 +77,15 @@ int main(int argc, char **argv) {
   if (r.bitstring.size() != 5 || r.cut < 0)
     throw std::runtime_error("max_cut: malformed answer");
   return 0;
+}
+
+// An escaping exception would skip the executor's cleanup at exit, leaving a
+// job waiting on the OPX and the quantum machine open.
+int main(int argc, char **argv) {
+  try {
+    return run(argc, argv);
+  } catch (const std::exception &e) {
+    std::fprintf(stderr, "error: %s\n", e.what());
+    return 1;
+  }
 }

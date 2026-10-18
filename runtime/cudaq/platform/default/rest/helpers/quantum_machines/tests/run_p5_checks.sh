@@ -61,7 +61,9 @@ start_mock() {  # fresh mock and RPC log per mode, so counts are per mode
 opnic_mounts=()
 if [ -f /usr/lib/libopnic.so.1.0.0 ]; then
   opnic_mounts+=(-v /usr/lib/libopnic.so.1.0.0:/usr/lib/libopnic.so.1.0.0:ro)
-  [ "$live" = 1 ] && [ -e /dev/opnic0 ] && opnic_mounts+=(--device /dev/opnic0)
+  # The SDK sets streams up through the host's opnic-service socket.
+  [ "$live" = 1 ] && [ -e /dev/opnic0 ] &&
+    opnic_mounts+=(--device /dev/opnic0 -v /run/opnic:/run/opnic)
 fi
 
 # Runs the binary with the given arguments in front of the defaults.
