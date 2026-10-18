@@ -46,11 +46,35 @@ using ParamStream = ::qm::OutgoingStream<ParamPacket, 4, ::qm::StreamType::CPU>;
 namespace cudaq::qm {
 namespace {
 
+/// One driver handle, as the card's: it pins buffers once and then answers
+/// EBUSY, so every stream needs its own.
+class FakeContext : public ::qm::stream::Context {
+public:
+  bool is_valid() const override { return true; }
+  ::qm::internal::GpuAlignedMemory &gpu_memory_allocate(std::size_t) override {
+    throw std::logic_error("FakeContext has no GPU memory");
+  }
+  std::vector<std::vector<PhysicalEntry>>
+  pin_buffers(const std::vector<::qm::stream::PinRequest> &) override {
+    if (pinned)
+      throw std::runtime_error(
+          "PIN_BUFFERS ioctl failed: Device or resource busy");
+    pinned = true;
+    return {};
+  }
+  void *mmap_bar(std::uint64_t, std::size_t,
+                 ::qm::stream::MemoryAccess) override {
+    return nullptr;
+  }
+
+private:
+  bool pinned = false;
+};
+
 /// Plays the OPX behind the SDK: waits for the doorbell a ParamStream::send
 /// rings, reads the parameter packet out of the slot, and writes result
 /// packets into the incoming ring, advancing its producer index.
-class FakeOpx : public ::qm::stream::Configurator,
-                public ::qm::stream::Context {
+class FakeOpx : public ::qm::stream::Configurator {
 public:
   FakeOpx(const std::string &results, std::string log) : log(std::move(log)) {
     std::stringstream ss(results);
@@ -94,20 +118,6 @@ public:
   }
   void teardown_stream(std::uint16_t, ::qm::StreamDirection) override {}
   void sync() override {}
-
-  // Context: CPU streams never touch these.
-  bool is_valid() const override { return true; }
-  ::qm::internal::GpuAlignedMemory &gpu_memory_allocate(std::size_t) override {
-    throw std::logic_error("FakeOpx has no GPU memory");
-  }
-  std::vector<std::vector<PhysicalEntry>>
-  pin_buffers(const std::vector<::qm::stream::PinRequest> &) override {
-    return {};
-  }
-  void *mmap_bar(std::uint64_t, std::size_t,
-                 ::qm::stream::MemoryAccess) override {
-    return nullptr;
-  }
 
 private:
   void serve() {
@@ -162,19 +172,21 @@ class SdkLink : public OpnicLink {
 public:
   SdkLink(std::uint16_t toOpx, std::uint16_t fromOpx, const std::string &serial,
           const std::string &fakeResults, const std::string &fakeLog) {
-    std::shared_ptr<::qm::stream::Context> context;
-    if (fakeResults.empty()) {
-      auto handlers = ::qm::stream::make_device_handlers(serial);
-      configurator = handlers.configurator;
-      context = handlers.context;
-    } else {
+    // The driver pins once per handle, so each stream opens its own, as the
+    // SDK's serial-only initialize_stream does.
+    auto handlers = [&]() -> ::qm::stream::DeviceHandlers {
+      if (!fake)
+        return ::qm::stream::make_device_handlers(serial);
+      return {std::make_shared<FakeContext>(), fake};
+    };
+    if (!fakeResults.empty())
       fake = std::make_shared<FakeOpx>(fakeResults, fakeLog);
-      configurator = fake;
-      context = fake;
-    }
-    results =
-        ::qm::initialize_stream<ResultStream>(fromOpx, configurator, context);
-    params = ::qm::initialize_stream<ParamStream>(toOpx, configurator, context);
+    auto in = handlers(), out = handlers();
+    configurator = in.configurator;
+    results = ::qm::initialize_stream<ResultStream>(fromOpx, in.configurator,
+                                                    in.context);
+    params = ::qm::initialize_stream<ParamStream>(toOpx, out.configurator,
+                                                  out.context);
     if (!results || !params)
       throw std::runtime_error(
           "quantum_machines: could not initialise the OPNIC streams " +
