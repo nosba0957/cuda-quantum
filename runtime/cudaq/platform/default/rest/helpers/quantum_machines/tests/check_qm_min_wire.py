@@ -151,6 +151,14 @@ def main(argv):
             "fixed_stream_data.data[:]": [0.5, -0.25]
         })
 
+    check("Cancel request", job_api_pb2.CancelRequest(job_id="job-99"),
+          Min("CancelRequest"), {"job_id": "job-99"})
+
+    resp = job_api_pb2.CancelResponse()
+    resp.error.details = "not running"
+    check("Cancel response(error)", resp, Min("CancelResponse"),
+          {"error.details": "not running"})
+
     check(
         "GetJobStatus request",
         job_api_pb2.JobServiceGetJobStatusRequest(job_id="job-99"),

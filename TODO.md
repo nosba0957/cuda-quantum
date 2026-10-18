@@ -671,8 +671,27 @@ Next, specified in `.scratch/p5-parameter-transport/spec.md` (ADR 0001):
       so `bitstring[i]` is qubit n-1-i, while the circuit puts vertex i on qubit
       i. CUDA-Q's bitstring[i] is qubit i, so `max_cut` is unaffected, but the
       two stacks disagree on any graph that is not symmetric under i -> n-1-i.
-- [ ] **P5c** — OPNIC transport via `libopnic`; spike on stream
-      re-initialisation first.
+- [ ] **P5c** — OPNIC transport via `libopnic`.
+  - [x] Offline (2026-10-18): `--qm-transport-opnic` / `--qm-transport opnic`
+        (compile time `--quantum_machines-qm-transport opnic`; target YAML
+        arguments always take a value). `qua_build.py --opnic-in/--opnic-out`
+        builds the OPNIC program; `libcudaq-qm-opnic.so` is a plugin
+        `QMExecutor` dlopens, so nothing else links libopnic. A job still
+        waiting for parameters is cancelled (`JobService/Cancel`, wire-checked)
+        before another runs and at close. `run_p5_checks.sh` passes all three
+        transports, OPNIC over an in-process fake behind the SDK's own
+        `Configurator` seam: 1 Compile, 7 packets of 16 values, nothing over
+        gRPC but setup, the waiting job cancelled.
+  - Build facts: QM's SDK needs GCC 13+ (`static_assert(false)` in unused
+    CUDA branches) and the toolchain is GCC 12, so the plugin is built by the
+    container's g++-13. Builds and runs need `/usr/include/{opnic,qm}` and
+    `/usr/lib/libopnic.so.1.0.0` mounted; live also `--device /dev/opnic0`.
+    Packets are fixed: 16 parameters out, 128 shots x 5 bits back (a full
+    4 KB slot), so OPNIC programs measure at most 5 bits.
+  - [ ] **Live spike, on the user's instrument time:** streams initialised
+        once must serve two different programs back to back.
+  - [ ] Live gate: `max_cut(5, seed)` over OPNIC, 100 evaluations, one
+        compile, machine released.
 
 ### P6 — native C++ emitter (optional endgame)
 - [ ] Port QuaProgram construction + the QuAM macro layer to C++, deleting the

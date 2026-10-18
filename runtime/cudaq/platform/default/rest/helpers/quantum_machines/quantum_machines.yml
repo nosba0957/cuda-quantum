@@ -47,6 +47,11 @@ target-arguments:
     type: string
     platform-arg: qm_config
     help-string: "Path to the serialized QuaConfig (qua_config.pb) for the chip. Also settable at run time as `--qm-config <path>` or $CUDAQ_QM_CONFIG."
+  - key: qm-transport
+    required: false
+    type: string
+    platform-arg: qm_transport
+    help-string: "How parameters reach the OPX: 'ethernet' (default) or 'opnic'. Run-time equivalents: `--qm-transport <name>`, or `--qm-transport-opnic`."
   - key: qm-endpoint
     required: false
     type: string

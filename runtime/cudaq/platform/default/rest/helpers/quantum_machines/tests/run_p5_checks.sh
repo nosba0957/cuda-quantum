@@ -13,8 +13,10 @@
 #   bash run_p5_checks.sh --live [args]   REAL OPX1000: opens a machine, plays pulses
 #
 # args go to the binary first, so --maxeval/--layers/--qm-* override defaults.
-# Offline it runs twice: Ethernet (baked, a compile per evaluation) and
-# streamed (--qm-parametric: one compile, two values pushed per evaluation).
+# Offline it runs three times: Ethernet (baked, a compile per evaluation),
+# streamed (--qm-parametric: one compile, two values pushed per evaluation),
+# and OPNIC over an in-process fake of the card (one compile, nothing over
+# gRPC but setup, and the waiting job cancelled at the end).
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -51,15 +53,24 @@ start_mock() {  # fresh mock and RPC log per mode, so counts are per mode
   if [ ! -f "$work/ready" ]; then cat "$work/mock.log"; exit 1; fi
 }
 
+# QM's opnic SDK lives on the host; the OPNIC plugin needs its library at run
+# time, and the live card needs its device.
+opnic_mounts=()
+if [ -f /usr/lib/libopnic.so.1.0.0 ]; then
+  opnic_mounts+=(-v /usr/lib/libopnic.so.1.0.0:/usr/lib/libopnic.so.1.0.0:ro)
+  [ "$live" = 1 ] && [ -e /dev/opnic0 ] && opnic_mounts+=(--device /dev/opnic0)
+fi
+
 # Runs the binary with the given arguments in front of the defaults.
 run_qaoa() {
   set +e
   local start; start=$(date +%s)
-  docker run --rm --network host \
+  docker run --rm --network host "${opnic_mounts[@]}" \
     -e CUDAQ_LOG_LEVEL="${CUDAQ_LOG_LEVEL:-}" \
     -v "$root":/workspace -v "$hostroot":"$hostroot" -v "$work":/work \
     -w /workspace/"${qmdir#$root/}" "$img" bash -lc '
   endpoint="$1"; cluster="$2"; py="$3"; state="$4"; shift 4
+  [ -f /usr/lib/libopnic.so.1.0.0 ] && ln -sf libopnic.so.1.0.0 /usr/lib/libopnic.so.1
   command -v protoc > /dev/null || \
     { apt-get update -qq && apt-get install -y -qq libprotobuf-dev; } > /dev/null 2>&1
   mkdir -p /work/qmtmp
@@ -122,6 +133,22 @@ else
   check "a push per sample ($pushes)" "[ $pushes -eq $((evals + 1)) ]"
   check "each push carries exactly gamma and beta" \
     "\"$py\" -c 'import json,sys; v=[json.loads(l) for l in open(sys.argv[1])]; p=[e for e in v if e[\"method\"].endswith(\"PushToInputStream\")]; sys.exit(0 if p and all(len(e[\"values\"])==2 for e in p) else 1)' '$work/rpc.jsonl'"
+
+  echo; echo "### OPNIC, fake link: compiled once, parameters and bits over OPNIC"
+  start_mock
+  run_qaoa --maxeval 6 --qm-transport-opnic --qm-opnic-fake "$results" \
+    --qm-opnic-fake-log /work/opnic.jsonl "$@"
+  check "every eval decoded to cut=2" "! grep '^eval ' '$work/run.log' | grep -qv 'cut=2.0000'"
+  c=$(compiles)
+  check "one Compile for the whole optimization ($c)" "[ $c -eq 1 ]"
+  check "no parameters or results over gRPC" \
+    "! grep -qE 'PushToInputStream|GetNamedResults' '$work/rpc.jsonl'"
+  packets=$(wc -l < "$work/opnic.jsonl" 2>/dev/null || echo 0)
+  check "an OPNIC parameter packet per sample ($packets)" "[ $packets -eq $((evals + 1)) ]"
+  check "each packet is gamma, beta and 14 zeros of padding" \
+    "\"$py\" -c 'import json,sys; p=[json.loads(l) for l in open(sys.argv[1])]; sys.exit(0 if p and all(len(v)==16 and not any(v[2:]) and any(v[:2]) for v in p) else 1)' '$work/opnic.jsonl'"
+  check "the job left waiting for parameters is cancelled" \
+    "grep -q 'JobService/Cancel' '$work/rpc.jsonl'"
 fi
 
 echo

@@ -251,6 +251,74 @@ def build(qc, machine, params, shots, iterations, stream_name):
     return prog
 
 
+# Must equal OpnicLink.h. Echoed in the manifest, which the C++ side checks.
+OPNIC_MAX_PARAMS = 16
+OPNIC_SHOTS_PER_PACKET = 128
+OPNIC_MAX_BITS = 5
+
+
+def build_opnic(qc, machine, params, shots, iterations, to_opx, from_opx):
+    """The OPNIC program, after ADC-QAOA's opnic_dgx_opx/qaoa_with_opt.py.
+
+    Per evaluation: receive the parameters, run every shot into a buffer, then
+    send the bits back in a fixed number of packets, shot-major with stride
+    OPNIC_MAX_BITS.
+    """
+    from qm.qua import (Cast, QuaArray, assign, declare, declare_input_stream,
+                        declare_output_stream, declare_struct, fixed, for_,
+                        program, qua_struct, receive_from_stream,
+                        send_to_stream)
+
+    nbits = sum(c.size for c in qc.cregs)
+    if nbits > OPNIC_MAX_BITS:
+        raise SystemExit(f"{nbits} measured bits, but an OPNIC result packet "
+                         f"carries {OPNIC_MAX_BITS} per shot")
+    if len(params) > OPNIC_MAX_PARAMS:
+        raise SystemExit(f"{len(params)} parameters, but an OPNIC parameter "
+                         f"packet carries {OPNIC_MAX_PARAMS}")
+    per_packet = OPNIC_SHOTS_PER_PACKET * OPNIC_MAX_BITS
+    packets = -(-shots // OPNIC_SHOTS_PER_PACKET)
+
+    @qua_struct
+    class ParamPacket:
+        params: QuaArray[float, OPNIC_MAX_PARAMS]
+
+    @qua_struct
+    class ResultPacket:
+        bits: QuaArray[int, OPNIC_SHOTS_PER_PACKET * OPNIC_MAX_BITS]
+
+    with program() as prog:
+        param_struct = declare_struct(ParamPacket)
+        param_stream = declare_input_stream("opnic", to_opx, ParamPacket)
+        out_struct = declare_struct(ResultPacket)
+        out_stream = declare_output_stream("opnic", from_opx, ResultPacket)
+        iteration, shot, pkt, idx = (declare(int) for _ in range(4))
+        param_map = {p: declare(fixed) for p in params}
+        buffer = declare(int, size=packets * per_packet)
+
+        machine.apply_all_flux_to_joint_idle()
+
+        with for_(iteration, 0, iteration < iterations, iteration + 1):
+            receive_from_stream(param_stream, target_variable=param_struct)
+            for k, p in enumerate(params):
+                assign(param_map[p], param_struct.params[k])
+            with for_(shot, 0, shot < shots, shot + 1):
+                cregs = emit_circuit(qc, machine, param_map)
+                offset = 0
+                for c in qc.cregs:
+                    for i in range(c.size):
+                        assign(buffer[shot * OPNIC_MAX_BITS + offset + i],
+                               Cast.to_int(cregs[c.name][i]))
+                    offset += c.size
+            # Always `packets` packets: the SDK's packet cache misbehaves when
+            # the batch size varies. Bits past `shots` are stale padding.
+            with for_(pkt, 0, pkt < packets, pkt + 1):
+                with for_(idx, 0, idx < per_packet, idx + 1):
+                    assign(out_struct.bits[idx], buffer[pkt * per_packet + idx])
+                send_to_stream(out_stream, out_struct)
+    return prog, packets
+
+
 def strip_loc(msg):
     """Drop the `loc` debug strings qm stamps on every statement.
 
@@ -322,6 +390,11 @@ def main(argv=None):
     ap.add_argument("--bind", default=None,
                     help="comma-separated values for p0, p1, ...: bake them in "
                     "instead of streaming them")
+    ap.add_argument("--opnic-in", type=int, default=None,
+                    help="OPNIC stream id carrying parameters to the OPX; "
+                    "with --opnic-out, build the OPNIC program")
+    ap.add_argument("--opnic-out", type=int, default=None,
+                    help="OPNIC stream id carrying result bits back")
     ap.add_argument("--state-path", default=None)
     ap.add_argument("--caps-file", default=None,
                     help="a qua_config.pb.caps.json; without it capabilities are "
@@ -383,7 +456,14 @@ def main(argv=None):
         qc = ensure_resets_for_active_qubits(qc)
 
     params = sorted(qc.parameters, key=_index)
-    prog = build(qc, machine, params, args.shots, args.iterations, args.stream_name)
+    opnic = args.opnic_in is not None and args.opnic_out is not None
+    if opnic:
+        prog, packets = build_opnic(qc, machine, params, args.shots,
+                                    args.iterations, args.opnic_in,
+                                    args.opnic_out)
+    else:
+        prog = build(qc, machine, params, args.shots, args.iterations,
+                     args.stream_name)
 
     pb = prog.qua_program
     if not args.keep_loc:
@@ -400,17 +480,27 @@ def main(argv=None):
         open(args.script, "w").write(generate_qua_script(prog))
 
     manifest = {
-        "input_stream": f"input_stream_{args.stream_name}" if params else "",
+        "input_stream": (f"input_stream_{args.stream_name}"
+                         if params and not opnic else ""),
         "input_stream_type": "fixed",
         "input_stream_size": len(params),
         "angles": [p.name for p in params],
         "periodic": periodic(qc, params),
         "shots": args.shots,
-        "iterations": args.iterations if params else 1,
+        "iterations": args.iterations if params or opnic else 1,
         "result_streams": [{"name": c.name, "size": c.size} for c in qc.cregs],
         "qubits": layout,
         "bytes": len(blob),
     }
+    if opnic:
+        manifest["opnic"] = {
+            "in": args.opnic_in,
+            "out": args.opnic_out,
+            "packets": packets,
+            "max_params": OPNIC_MAX_PARAMS,
+            "shots_per_packet": OPNIC_SHOTS_PER_PACKET,
+            "max_bits": OPNIC_MAX_BITS,
+        }
     if args.manifest:
         open(args.manifest, "w").write(json.dumps(manifest, indent=2) + "\n")
     print(json.dumps(manifest), file=sys.stderr)

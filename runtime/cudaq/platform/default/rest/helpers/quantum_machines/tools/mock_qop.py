@@ -136,6 +136,13 @@ class MockQOP:
                                if running else common_types_pb2.PENDING)
         return resp.SerializeToString()
 
+    def cancel(self, payload, context):
+        req = job_api_pb2.CancelRequest.FromString(payload)
+        self.record(f"{JOB}/Cancel", payload, job_id=req.job_id)
+        resp = job_api_pb2.CancelResponse()
+        resp.success.SetInParent()
+        return resp.SerializeToString()
+
     def close(self, payload, context):
         req = qm_api_pb2.QmServiceCloseRequest.FromString(payload)
         self.record(f"{QM}/Close",
@@ -222,6 +229,8 @@ class MockQOP:
                 unary(self.add_compiled_to_queue, *ident),
             f"{QM}/Close":
                 unary(self.close, *ident),
+            f"{JOB}/Cancel":
+                unary(self.cancel, *ident),
             f"{JOB}/GetJobStatus":
                 unary(self.get_job_status, *ident),
             f"{JOB}/PushToInputStream":

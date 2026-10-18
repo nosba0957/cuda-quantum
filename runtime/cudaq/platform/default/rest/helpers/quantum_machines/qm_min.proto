@@ -296,7 +296,27 @@ message JobServiceGetJobStatusResponse {
   }
 }
 
+// What the SDK's job.cancel() (and the deprecated job.halt()) sends: stops a
+// job that is still waiting for parameters, so the next program can run.
+message CancelRequest {
+  string job_id = 1;
+}
+
+message CancelResponse {
+  message CancelJobSuccess {}
+
+  message CancelJobError {
+    string details = 1;
+  }
+
+  oneof response_oneof {
+    CancelJobSuccess success = 1;
+    CancelJobError error = 2;
+  }
+}
+
 service JobService {
+  rpc Cancel(CancelRequest) returns (CancelResponse);
   rpc GetJobStatus(JobServiceGetJobStatusRequest)
       returns (JobServiceGetJobStatusResponse);
   rpc PushToInputStream(JobServicePushToInputStreamRequest)

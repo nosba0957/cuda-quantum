@@ -20,6 +20,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdlib>
+#include <dlfcn.h>
 #include <filesystem>
 #include <fstream>
 #include <future>
@@ -126,7 +127,42 @@ std::string lookupSetting(const std::string &key,
   return it == backend.end() ? std::string() : it->second;
 }
 
+bool hasFlag(const std::string &flag) {
+  for (const auto &arg : processArgs())
+    if (arg == flag)
+      return true;
+  return false;
+}
+
 } // namespace
+
+/// Loads the OPNIC plugin that sits next to this library. It is separate so
+/// that nothing else needs libopnic at run time.
+std::unique_ptr<qm::OpnicLink>
+qm::OpnicLink::open(std::uint16_t toOpx, std::uint16_t fromOpx,
+                    const std::string &serial, const std::string &fakeResults,
+                    const std::string &fakeLog) {
+  Dl_info self{};
+  dladdr(reinterpret_cast<void *>(&qm::OpnicLink::open), &self);
+  const auto path = std::filesystem::path(self.dli_fname ? self.dli_fname : "")
+                        .parent_path() /
+                    "libcudaq-qm-opnic.so";
+  void *plugin = dlopen(path.c_str(), RTLD_NOW | RTLD_LOCAL);
+  if (!plugin)
+    throw std::runtime_error(
+        "quantum_machines: the OPNIC transport is unavailable: " +
+        std::string(dlerror()) +
+        ". It needs a build that found QM's opnic SDK, and libopnic at run "
+        "time.");
+  using Open = qm::OpnicLink *(*)(std::uint16_t, std::uint16_t, const char *,
+                                  const char *, const char *);
+  auto open = reinterpret_cast<Open>(dlsym(plugin, "cudaq_qm_opnic_open"));
+  if (!open)
+    throw std::runtime_error("quantum_machines: " + path.string() +
+                             " has no cudaq_qm_opnic_open");
+  return std::unique_ptr<qm::OpnicLink>(open(
+      toOpx, fromOpx, serial.c_str(), fakeResults.c_str(), fakeLog.c_str()));
+}
 
 double wrapAngle(double radians) {
   constexpr double twoPi = 2.0 * M_PI;
@@ -208,6 +244,21 @@ void QMExecutor::loadSettings() {
     config.resetAttempts = std::stoi(v);
   if (auto v = get("parametric"); !v.empty())
     config.parametric = v != "0" && v != "false" && v != "off";
+  if (auto v = get("transport"); !v.empty())
+    config.transport = v;
+  if (hasFlag("--qm-transport-opnic"))
+    config.transport = "opnic";
+  if (config.transport != "ethernet" && config.transport != "opnic")
+    throw std::runtime_error("quantum_machines: transport '" +
+                             config.transport +
+                             "' is neither 'ethernet' nor 'opnic'");
+  if (auto v = get("opnic-in"); !v.empty())
+    config.opnicToOpx = std::stoi(v);
+  if (auto v = get("opnic-out"); !v.empty())
+    config.opnicFromOpx = std::stoi(v);
+  config.opnicSerial = get("opnic-serial");
+  config.opnicFake = get("opnic-fake");
+  config.opnicFakeLog = get("opnic-fake-log");
   if (auto v = get("element-bytes"); !v.empty())
     config.resultElementBytes = std::stoul(v);
   if (auto v = get("result-timeout"); !v.empty())
@@ -232,9 +283,10 @@ void QMExecutor::loadSettings() {
         "quantum_machines: no QuaConfig; pass --qm-config <qua_config.pb>");
 
   configLoaded = true;
-  CUDAQ_INFO("quantum_machines: QOP {} cluster '{}' config {} builder {}",
+  CUDAQ_INFO("quantum_machines: QOP {} cluster '{}' config {} builder {} "
+             "transport {}",
              config.endpoint, config.cluster, config.configPath,
-             config.builderPath);
+             config.builderPath, config.transport);
 }
 
 const QMSettings &QMExecutor::settings() {
@@ -284,14 +336,14 @@ std::string QMExecutor::structuralKey(const QasmStructure &scan) {
   std::ostringstream ss;
   // Baked-in parameters are part of the compiled program, so two evaluations
   // differ in program as well as in values unless the values are streamed.
-  if (!config.parametric) {
+  if (!compileOnce()) {
     ss << std::setprecision(17);
     for (double value : scan.parameters)
       ss << value << ',';
     ss << '|';
   }
-  ss << scan.structure << "|shots=" << shots
-     << "|iterations=" << config.iterations
+  ss << scan.structure << "|transport=" << config.transport
+     << "|shots=" << shots << "|iterations=" << config.iterations
      << "|opt=" << config.optimizationLevel << "|reset=" << config.resetType
      << ':' << config.resetAttempts << "|quam=" << quamFingerprint();
   return ss.str();
@@ -352,6 +404,13 @@ void QMExecutor::closeQuantumMachine() {
 void QMExecutor::closeLocked() {
   if (machineId.empty() || !channel)
     return;
+  if (active && !active->jobId.empty() && active->pushes < active->iterations)
+    try {
+      cancelJob(*active);
+    } catch (const std::exception &e) {
+      CUDAQ_WARN("quantum_machines: {}", e.what());
+    }
+  active = nullptr;
   pb::QmServiceCloseRequest request;
   request.set_quantum_machine_id(machineId);
   std::string wire;
@@ -426,7 +485,10 @@ QMProgram QMExecutor::buildProgram(const KernelExecution &code,
       << " --optimization-level " << config.optimizationLevel
       << " --reset-type " << shellQuote(config.resetType)
       << " --reset-max-attempts " << config.resetAttempts;
-  if (!config.parametric && !scan.parameters.empty()) {
+  if (config.transport == "opnic")
+    cmd << " --opnic-in " << config.opnicToOpx << " --opnic-out "
+        << config.opnicFromOpx;
+  else if (!config.parametric && !scan.parameters.empty()) {
     std::ostringstream values;
     values << std::setprecision(17);
     for (std::size_t k = 0; k < scan.parameters.size(); ++k)
@@ -464,9 +526,21 @@ QMProgram QMExecutor::buildProgram(const KernelExecution &code,
     program.parameterSlots.push_back(
         std::stoul(name.get<std::string>().substr(1)));
   program.periodic = manifest.at("periodic").get<std::vector<bool>>();
-  for (const auto &stream : manifest.at("result_streams"))
+  if (manifest.contains("opnic")) {
+    const auto &o = manifest.at("opnic");
+    if (o.at("max_params") != qm::OpnicMaxParams ||
+        o.at("shots_per_packet") != qm::OpnicShotsPerPacket ||
+        o.at("max_bits") != qm::OpnicMaxBits)
+      throw std::runtime_error("quantum_machines: qua_build.py's OPNIC packet "
+                               "shapes differ from this build's: " +
+                               o.dump());
+    program.opnicPackets = o.at("packets").get<std::size_t>();
+  }
+  for (const auto &stream : manifest.at("result_streams")) {
     program.resultStreams.emplace_back(stream.at("name").get<std::string>(),
                                        stream.at("size").get<std::size_t>());
+    program.resultBits += program.resultStreams.back().second;
+  }
   if (program.resultStreams.empty())
     throw std::runtime_error(
         "quantum_machines: the built program has no result stream");
@@ -514,6 +588,14 @@ QMProgram &QMExecutor::programFor(const std::string &key,
   // A job serves `iterations` pushes and then ends. Requeueing the already
   // compiled program costs one RPC and keeps Compile off the hot path.
   if (program.jobId.empty() || program.pushes >= program.iterations) {
+    if (active && active != &program && !active->jobId.empty() &&
+        active->pushes < active->iterations)
+      cancelJob(*active);
+    // OPNIC streams must exist before the job that uses them starts.
+    if (program.opnicPackets && !opnic)
+      opnic = qm::OpnicLink::open(config.opnicToOpx, config.opnicFromOpx,
+                                  config.opnicSerial, config.opnicFake,
+                                  config.opnicFakeLog);
     pb::QmServiceAddCompiledToQueueRequest request;
     request.set_quantum_machine_id(machineId);
     request.set_program_id(program.programId);
@@ -534,8 +616,9 @@ QMProgram &QMExecutor::programFor(const std::string &key,
     program.jobId = response.success().job_id();
     // Only a push needs the job running. A stream-free job may already be
     // PROCESSING by the time we could ask.
-    if (!program.inputStream.empty())
+    if (!program.inputStream.empty() || program.opnicPackets)
       waitUntilRunning(program.jobId);
+    active = &program;
     program.pushes = 0;
     program.itemsConsumed = 0;
     CUDAQ_INFO("quantum_machines: queued program {} as job {}",
@@ -545,8 +628,15 @@ QMProgram &QMExecutor::programFor(const std::string &key,
 }
 
 void QMExecutor::pushParameters(QMProgram &program, const QasmStructure &scan) {
-  if (program.inputStream.empty()) {
+  if (program.inputStream.empty() && !program.opnicPackets) {
     // Nothing streamed, so no stream gates the job: it runs its shots on start.
+    ++program.pushes;
+    return;
+  }
+  const auto values = streamedValues(program, scan);
+  if (program.opnicPackets) {
+    opnic->expect(program.shots, program.opnicPackets);
+    opnic->send(values);
     ++program.pushes;
     return;
   }
@@ -554,20 +644,8 @@ void QMExecutor::pushParameters(QMProgram &program, const QasmStructure &scan) {
   request.set_job_id(program.jobId);
   request.set_stream_name(program.inputStream);
   auto *data = request.mutable_fixed_stream_data();
-  for (std::size_t i = 0; i < program.parameterSlots.size(); ++i) {
-    double value = scan.parameters[program.parameterSlots[i]];
-    // Whole coefficients make a 2*pi shift invisible to every angle.
-    if (i < program.periodic.size() && program.periodic[i])
-      value = wrapAngle(value);
-    if (std::abs(value) >= 8.0)
-      throw std::runtime_error(
-          "quantum_machines: parameter p" +
-          std::to_string(program.parameterSlots[i]) + " = " +
-          std::to_string(value) +
-          " does not fit QUA fixed (|x| < 8) and cannot be folded, because "
-          "an angle uses it with a fractional coefficient");
+  for (double value : values)
     data->add_data(value);
-  }
   if (static_cast<std::size_t>(data->data_size()) != program.inputStreamSize)
     throw std::runtime_error("quantum_machines: pushing " +
                              std::to_string(data->data_size()) +
@@ -590,8 +668,69 @@ void QMExecutor::pushParameters(QMProgram &program, const QasmStructure &scan) {
   ++program.pushes;
 }
 
+bool QMExecutor::compileOnce() const {
+  return config.parametric || config.transport == "opnic";
+}
+
+std::vector<double> QMExecutor::streamedValues(const QMProgram &program,
+                                               const QasmStructure &scan) {
+  std::vector<double> values;
+  for (std::size_t i = 0; i < program.parameterSlots.size(); ++i) {
+    double value = scan.parameters[program.parameterSlots[i]];
+    // Whole coefficients make a 2*pi shift invisible to every angle.
+    if (i < program.periodic.size() && program.periodic[i])
+      value = wrapAngle(value);
+    if (std::abs(value) >= 8.0)
+      throw std::runtime_error(
+          "quantum_machines: parameter p" +
+          std::to_string(program.parameterSlots[i]) + " = " +
+          std::to_string(value) +
+          " does not fit QUA fixed (|x| < 8) and cannot be folded, because "
+          "an angle uses it with a fractional coefficient");
+    values.push_back(value);
+  }
+  return values;
+}
+
+std::map<std::string, CountsDictionary>
+QMExecutor::receiveOpnic(QMProgram &program) {
+  const auto bits = opnic->receive(program.opnicPackets);
+  std::map<std::string, CountsDictionary> counts;
+  for (std::size_t shot = 0; shot < program.shots; ++shot) {
+    const auto *row = bits.data() + shot * qm::OpnicMaxBits;
+    std::size_t offset = 0;
+    for (const auto &[name, size] : program.resultStreams) {
+      std::string outcome(size, '0');
+      for (std::size_t i = 0; i < size; ++i)
+        outcome[i] = row[offset + i] ? '1' : '0';
+      ++counts[name][outcome];
+      offset += size;
+    }
+  }
+  return counts;
+}
+
+void QMExecutor::cancelJob(QMProgram &program) {
+  pb::CancelRequest request;
+  request.set_job_id(program.jobId);
+  std::string wire;
+  auto status = openChannel().invoke("/qm.grpc.v2.JobService/Cancel",
+                                     request.SerializeAsString(), wire);
+  pb::CancelResponse response;
+  if (!status.ok() || !response.ParseFromString(wire) || response.has_error())
+    throw std::runtime_error(
+        "quantum_machines: could not cancel job " + program.jobId + ": " +
+        (status.ok() ? response.error().details() : status.describe()));
+  CUDAQ_INFO("quantum_machines: cancelled job {}", program.jobId);
+  program.jobId.clear();
+  if (active == &program)
+    active = nullptr;
+}
+
 std::map<std::string, CountsDictionary>
 QMExecutor::fetchCounts(QMProgram &program) {
+  if (program.opnicPackets)
+    return receiveOpnic(program);
   std::map<std::string, std::unique_ptr<qm::QuaResultDecoder>> decoders;
   std::map<std::string, int> summaries;
   for (const auto &[name, size] : program.resultStreams) {

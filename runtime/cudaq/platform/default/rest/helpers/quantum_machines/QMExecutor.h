@@ -14,6 +14,7 @@
 #pragma once
 
 #include "GrpcCurl.h"
+#include "OpnicLink.h"
 #include "common/Executor.h"
 
 #include <map>
@@ -44,6 +45,14 @@ struct QMSettings {
   /// baking them into the program. The QOP does not currently advance input
   /// streams, so this is off by default.
   bool parametric = false;
+  /// "ethernet" or "opnic"; see GLOSSARY.md. OPNIC always compiles once.
+  std::string transport = "ethernet";
+  std::uint16_t opnicToOpx = 987;
+  std::uint16_t opnicFromOpx = 654;
+  std::string opnicSerial;
+  /// Comma-separated bitstrings: an in-process fake OPX instead of the card.
+  std::string opnicFake;
+  std::string opnicFakeLog;
   /// Width of one QUA int in a GetNamedResults buffer. Not restated on that
   /// RPC; see QuaResults.h.
   std::size_t resultElementBytes = 8;
@@ -66,6 +75,10 @@ struct QMProgram {
   std::size_t iterations = 0;
   std::size_t pushes = 0;
   std::size_t itemsConsumed = 0;
+  /// OPNIC result packets per evaluation; 0 for an Ethernet program.
+  std::size_t opnicPackets = 0;
+  /// clbits per shot across all result streams, in their order.
+  std::size_t resultBits = 0;
 };
 
 /// A circuit structure and the values of its variational parameters. The
@@ -121,6 +134,11 @@ private:
   QMProgram buildProgram(const KernelExecution &code,
                          const QasmStructure &scan);
   void pushParameters(QMProgram &program, const QasmStructure &scan);
+  std::vector<double> streamedValues(const QMProgram &program,
+                                     const QasmStructure &scan);
+  std::map<std::string, CountsDictionary> receiveOpnic(QMProgram &program);
+  void cancelJob(QMProgram &program);
+  bool compileOnce() const;
   std::map<std::string, CountsDictionary> fetchCounts(QMProgram &program);
   std::string structuralKey(const QasmStructure &scan);
   std::string quamFingerprint();
@@ -133,6 +151,10 @@ private:
   std::string configBlob;
   std::unique_ptr<qm::GrpcChannel> channel;
   std::map<std::string, QMProgram> cache;
+  /// The program whose job was queued last; a job still waiting for
+  /// parameters blocks the next one, so it is cancelled first.
+  QMProgram *active = nullptr;
+  std::unique_ptr<qm::OpnicLink> opnic;
 };
 
 } // namespace cudaq
