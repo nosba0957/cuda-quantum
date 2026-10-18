@@ -46,6 +46,7 @@ class MockQOP:
         self.lock = threading.Lock()
         self.counter = 0
         self.pending_polls = {}
+        self.missing_polls = {}
         self.log_file = open(args.log, "w") if args.log else None
 
     def record(self, method, payload, **fields):
@@ -170,6 +171,16 @@ class MockQOP:
         req = job_api_pb2.GetNamedResultsRequest.FromString(payload)
         names = [o.output_name for o in req.outputs]
         name = names[0] if names else self.args.creg_name
+        with self.lock:
+            seen = self.missing_polls.get(req.job_id, 0)
+            self.missing_polls[req.job_id] = seen + 1
+        if seen < self.args.missing_polls:
+            self.record(f"{JOB}/GetNamedResults", payload, job_id=req.job_id,
+                        outputs=names, missing=True)
+            resp = job_api_pb2.GetNamedResultResponse()
+            resp.error.details = f"cannot find result {name}"
+            yield resp.SerializeToString()
+            return
         chunks = self._result_chunks()
         self.record(f"{JOB}/GetNamedResults",
                     payload,
@@ -272,6 +283,10 @@ def main():
     ap.add_argument("--pending-polls", type=int, default=1,
                     help="GetJobStatus replies PENDING this many times before "
                          "RUNNING, modelling the real queue")
+    ap.add_argument("--missing-polls", type=int, default=0,
+                    help="GetNamedResults answers each job with an error frame "
+                         "'cannot find result' this many times first, as the "
+                         "real QOP does before it registers the job's outputs")
     ap.add_argument("--results",
                     default="00,11,11,00",
                     help="comma-separated per-shot outcomes, LSB-first")

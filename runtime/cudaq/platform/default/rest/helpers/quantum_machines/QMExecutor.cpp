@@ -800,17 +800,25 @@ QMExecutor::fetchCounts(QMProgram &program) {
           else if (success.has_data_summary())
             summaries[name] = success.data_summary().count();
         });
-    if (!failure.empty())
-      throw std::runtime_error("quantum_machines: GetNamedResults: " + failure);
-    if (!status.ok()) {
-      // The QOP registers a job's result streams a moment after the job
-      // starts, and reports the name as missing until it has.
-      const std::string described = status.describe();
-      if (described.find("cannot find result") != std::string::npos &&
-          std::chrono::steady_clock::now() <= deadline) {
-        std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    // The QOP registers a job's result streams a moment after the job starts,
+    // and reports the name as missing until it has, as a gRPC status or as an
+    // error frame.
+    auto notYet = [&](const std::string &described) {
+      if (described.find("cannot find result") == std::string::npos ||
+          std::chrono::steady_clock::now() > deadline)
+        return false;
+      std::this_thread::sleep_for(std::chrono::milliseconds(200));
+      return true;
+    };
+    if (!failure.empty()) {
+      if (notYet(failure))
         continue;
-      }
+      throw std::runtime_error("quantum_machines: GetNamedResults: " + failure);
+    }
+    if (!status.ok()) {
+      const std::string described = status.describe();
+      if (notYet(described))
+        continue;
       throw std::runtime_error("quantum_machines: GetNamedResults failed: " +
                                described);
     }

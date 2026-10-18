@@ -49,7 +49,7 @@ start_mock() {  # fresh mock and RPC log per mode, so counts are per mode
   # must report an expected cut of exactly 2, whatever angles COBYLA picks.
   "$py" "$qmdir/tools/mock_qop.py" --listen "$endpoint" \
     --log "$work/rpc.jsonl" --ready-file "$work/ready" \
-    --stream-frames 3 --stream-delay 0 --results "$results" \
+    --stream-frames 3 --stream-delay 0 --missing-polls 1 --results "$results" \
     > "$work/mock.log" 2>&1 &
   mock_pid=$!
   for _ in $(seq 60); do [ -f "$work/ready" ] && break; sleep 0.25; done
@@ -130,6 +130,7 @@ else
   c=$(compiles)
   check "a Compile per parameter set ($c)" "[ $c -ge $evals ] && [ $c -le $((evals + 1)) ]"
   check "nothing pushed" "! grep -q PushToInputStream '$work/rpc.jsonl'"
+  check "results not yet registered are retried" "grep -q '\"missing\": true' '$work/rpc.jsonl'"
 
   echo; echo "### Streamed: compiled once, two values pushed per evaluation"
   start_mock
