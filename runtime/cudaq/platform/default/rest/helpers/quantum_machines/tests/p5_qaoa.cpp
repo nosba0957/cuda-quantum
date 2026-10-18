@@ -69,8 +69,15 @@ static int run(int argc, char **argv) {
   int evals = 0;
   auto [best, params] = optimizer.optimize(
       2 * layers, [&](const std::vector<double> &theta, std::vector<double> &) {
-        const double cut =
-            expectedCut(cudaq::sample(shots, qaoa, theta, u, v, n, layers));
+        double cut;
+        try {
+          cut = expectedCut(cudaq::sample(shots, qaoa, theta, u, v, n, layers));
+        } catch (const std::exception &e) {
+          // NLopt swallows the message and reports only "nlopt failure".
+          std::fprintf(stderr, "error in evaluation %d: %s\n", evals + 1,
+                       e.what());
+          throw;
+        }
         std::printf("eval %d cut=%.4f theta=", ++evals, cut);
         for (double t : theta)
           std::printf(" %.4f", t);
