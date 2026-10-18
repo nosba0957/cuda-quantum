@@ -640,7 +640,9 @@ paths.
 - [x] `tests/run_p5_checks.sh` passes on the mock (2026-10-17): 6 evals,
       6 `Compile`, 0 pushes, final sample at the best angles is a cache hit.
       ~3-4 s per eval offline, mostly the `qua_build.py` subprocess.
-- [ ] `run_p5_checks.sh --live` on as-qpu-5q4c.
+- [x] `run_p5_checks.sh --live --maxeval 2` on as-qpu-5q4c (2026-10-18):
+      the loop closes on the instrument; one earlier attempt failed once
+      with a cause NLopt hid (now printed), and did not recur.
 - **Gate (amended 2026-10-17):** the COBYLA loop closes on the instrument —
   every evaluation returns the requested shots and the run ends cleanly.
   Convergence is reported, not asserted (calibration, as in P4).
@@ -695,8 +697,9 @@ Next, specified in `.scratch/p5-parameter-transport/spec.md` (ADR 0001):
         `run_p5_checks.sh` runs the two-structure spike over the fake card.
         The chip's readout gave stuck bits on Ethernet and OPNIC alike
         (qubit 0 always 0, qubit 1 always 1): calibration, not transport.
-  - [ ] Live gate: `max_cut(5, seed)` over OPNIC, 100 evaluations, one
-        compile, machine released.
+  - [x] Live gate (2026-10-18, shortened to 10 evaluations at the user's
+        request): `max_cut(5, 1)` over OPNIC returned `10100`, cut 4, and
+        released the machine. One Compile is asserted offline only.
 
 ### P6 — native C++ emitter (optional endgame)
 - [ ] Port QuaProgram construction + the QuAM macro layer to C++, deleting the
