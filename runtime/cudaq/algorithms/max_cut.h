@@ -24,6 +24,7 @@
 #include <functional>
 #include <limits>
 #include <random>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -48,7 +49,8 @@ struct max_cut_options {
   /// `np.random.seed(s); np.random.uniform(0, 2*np.pi, 2*p)` draws them.
   std::uint32_t init_seed = 42;
   /// Qubits on the QPU. A graph with more nodes is split into subgraphs of at
-  /// most this many nodes (but see `detail::split`).
+  /// most this many nodes; `max_cut` throws when the split's last subgraph is
+  /// larger (see `detail::split`).
   int qpu_qubits = 5;
   /// Bitstrings each subgraph keeps for the merge, the most frequent first
   /// (ADC-QAOA's `--subqaoa_res_size`).
@@ -337,8 +339,17 @@ inline max_cut_result max_cut(std::size_t n, std::uint64_t seed,
       x0[l] = 0.56 * t;
       x0[options.layers + l] = 0.56 * (1 - t);
     }
+    const auto parts = detail::split(n, edges, options.qpu_qubits);
+    // The split's last subgraph can be larger than the QPU; stop before any
+    // subgraph runs rather than ask the QPU for qubits it does not have.
+    for (auto &s : parts)
+      if (s.size > options.qpu_qubits)
+        throw std::runtime_error("max_cut: a subgraph has " +
+                                 std::to_string(s.size) +
+                                 " nodes, more than qpu_qubits (" +
+                                 std::to_string(options.qpu_qubits) + ")");
     std::vector<std::vector<std::string>> answers;
-    for (auto &s : detail::split(n, edges, options.qpu_qubits)) {
+    for (auto &s : parts) {
       // Renumbered so that same-shape subgraphs share one compile; the answers
       // are put back in the subgraph's own order before anything else.
       std::vector<int> order;
