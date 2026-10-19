@@ -8,15 +8,19 @@
 
 // Max-Cut by QAOA in one call: draw an Erdos-Renyi graph exactly as networkx
 // would for the same seed, optimize a QAOA circuit for it with COBYLA on the
-// host, and return the most frequent bitstring at the best parameters.
+// host, and return the most frequent bitstring at the best parameters. A graph
+// with more nodes than the QPU has qubits is split into subgraphs, solved one
+// after another, and merged, as the Python ADC-QAOA does (ADR 0002).
 
 #pragma once
 
 #include "cudaq.h"
 #include "cudaq/optimizers.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
+#include <functional>
 #include <limits>
 #include <random>
 #include <string>
@@ -42,6 +46,12 @@ struct max_cut_options {
   /// Seed of the initial parameters, drawn uniformly from [0, 2*pi) the way
   /// `np.random.seed(s); np.random.uniform(0, 2*np.pi, 2*p)` draws them.
   std::uint32_t init_seed = 42;
+  /// Qubits on the QPU. A graph with more nodes is split into subgraphs of at
+  /// most this many nodes (but see `detail::split`).
+  int qpu_qubits = 5;
+  /// Bitstrings each subgraph keeps for the merge, the most frequent first
+  /// (ADC-QAOA's `--subqaoa_res_size`).
+  std::size_t subgraph_answers = 1;
 };
 
 /// The answer to a Max-Cut instance: `bitstring[i]` is the side of vertex i.
@@ -155,6 +165,110 @@ inline int cut_value(const std::string &bits,
   return cut;
 }
 
+/// One subgraph of a Max-Cut graph too large for the QPU: nodes `first` to
+/// `first + size - 1`, renumbered from 0, so local node 0 is the boundary node
+/// shared with the previous subgraph.
+struct subgraph {
+  int first = 0;
+  int size = 0;
+  /// The graph's edges between those nodes, in local numbering.
+  std::vector<std::pair<int, int>> edges;
+};
+
+/// ADC-QAOA's `random_cut` with its driver's subgraph count: ceil((n-1)/(q-1))
+/// runs of consecutive nodes starting `n / count` apart, each reaching one node
+/// into the next so that neighbours share a boundary node; the last takes all
+/// remaining nodes, even when that is more than `qpu_qubits`.
+inline std::vector<subgraph>
+split(int n, const std::vector<std::pair<int, int>> &edges, int qpu_qubits) {
+  const int count = (n + qpu_qubits - 2) / (qpu_qubits - 1);
+  const int step = n / count;
+  std::vector<subgraph> parts(count);
+  for (int i = 0; i < count; ++i) {
+    auto &s = parts[i];
+    s.first = i * step;
+    s.size = (i == count - 1 ? n : s.first + step + 1) - s.first;
+    for (auto [a, b] : edges)
+      if (a >= s.first && b < s.first + s.size)
+        s.edges.emplace_back(a - s.first, b - s.first);
+  }
+  return parts;
+}
+
+/// Optimizes QAOA for the graph with COBYLA from `x0` and samples it at the
+/// best parameters found.
+inline sample_result qaoa_counts(int n,
+                                 const std::vector<std::pair<int, int>> &edges,
+                                 std::vector<double> x0,
+                                 const max_cut_options &options) {
+  std::vector<int> u, v;
+  for (auto [a, b] : edges) {
+    u.push_back(a);
+    v.push_back(b);
+  }
+  const int dim = 2 * options.layers;
+
+  auto expectedCut = [&](const sample_result &counts) {
+    double cut = 0;
+    std::size_t total = 0;
+    for (auto &[bits, count] : counts) {
+      cut += count * cut_value(bits, edges);
+      total += count;
+    }
+    return total ? cut / total : 0.0;
+  };
+
+  optimizers::cobyla optimizer;
+  optimizer.initial_parameters = std::move(x0);
+  optimizer.max_eval = options.max_eval;
+  optimizer.f_tol = options.tol;
+  optimizer.step_size = options.initial_step;
+  // Unbounded, as scipy's COBYLA is; NLopt's default box is [-pi, pi].
+  optimizer.lower_bounds =
+      std::vector<double>(dim, -std::numeric_limits<double>::infinity());
+  optimizer.upper_bounds =
+      std::vector<double>(dim, std::numeric_limits<double>::infinity());
+
+  auto [best, params] = optimizer.optimize(
+      dim, [&](const std::vector<double> &theta, std::vector<double> &) {
+        return -expectedCut(cudaq::sample(options.shots, max_cut_qaoa{}, theta,
+                                          u, v, n, options.layers));
+      });
+
+  return cudaq::sample(options.shots, max_cut_qaoa{}, params, u, v, n,
+                       options.layers);
+}
+
+/// ADC-QAOA's merge of all subgraphs in one go: every way of joining one
+/// answer per subgraph, in order, where neighbours put their boundary node on
+/// the same side. The joining with the best cut of the whole graph wins; the
+/// first found wins a tie.
+inline max_cut_result
+merge(const std::vector<std::vector<std::string>> &answers,
+      const std::vector<std::pair<int, int>> &edges) {
+  max_cut_result best;
+  best.cut = -1;
+  std::string bits;
+  std::function<void(std::size_t)> join = [&](std::size_t i) {
+    if (i == answers.size()) {
+      const int cut = cut_value(bits, edges);
+      if (cut > best.cut)
+        best = {bits, cut};
+      return;
+    }
+    for (auto &a : answers[i]) {
+      if (i && a.front() != bits.back())
+        continue;
+      const auto size = bits.size();
+      bits += i ? a.substr(1) : a;
+      join(i + 1);
+      bits.resize(size);
+    }
+  };
+  join(0);
+  return best;
+}
+
 } // namespace detail
 
 /// The edges of networkx's `erdos_renyi_graph(n, p, seed=seed)`, in its order:
@@ -173,49 +287,49 @@ erdos_renyi_graph(std::size_t n, double p, std::uint64_t seed) {
 }
 
 /// Solves Max-Cut on `erdos_renyi_graph(n, options.density, seed)` with QAOA.
-/// Runs on whatever target the program was compiled for.
+/// A graph with more nodes than `options.qpu_qubits` is split into subgraphs,
+/// each solved by its own QAOA run in turn, and their answers merged, as the
+/// Python ADC-QAOA does. Runs on whatever target the program was compiled for.
 inline max_cut_result max_cut(std::size_t n, std::uint64_t seed,
                               const max_cut_options &options = {}) {
   const auto edges = erdos_renyi_graph(n, options.density, seed);
-  std::vector<int> u, v;
-  for (auto [a, b] : edges) {
-    u.push_back(a);
-    v.push_back(b);
-  }
-  const int dim = 2 * options.layers;
-
-  auto expectedCut = [&](const sample_result &counts) {
-    double cut = 0;
-    std::size_t total = 0;
-    for (auto &[bits, count] : counts) {
-      cut += count * detail::cut_value(bits, edges);
-      total += count;
+  if (n > static_cast<std::size_t>(options.qpu_qubits)) {
+    // ADC-QAOA's start: `linear_args(p, 0.56 * p)`.
+    std::vector<double> x0(2 * options.layers);
+    for (int l = 0; l < options.layers; ++l) {
+      const double t = (l + 0.5) / options.layers;
+      x0[l] = 0.56 * t;
+      x0[options.layers + l] = 0.56 * (1 - t);
     }
-    return total ? cut / total : 0.0;
-  };
-
-  optimizers::cobyla optimizer;
-  optimizer.initial_parameters =
-      detail::initial_parameters(options.init_seed, dim);
-  optimizer.max_eval = options.max_eval;
-  optimizer.f_tol = options.tol;
-  optimizer.step_size = options.initial_step;
-  // Unbounded, as scipy's COBYLA is; NLopt's default box is [-pi, pi].
-  optimizer.lower_bounds =
-      std::vector<double>(dim, -std::numeric_limits<double>::infinity());
-  optimizer.upper_bounds =
-      std::vector<double>(dim, std::numeric_limits<double>::infinity());
-
-  auto [best, params] = optimizer.optimize(
-      dim, [&](const std::vector<double> &theta, std::vector<double> &) {
-        return -expectedCut(cudaq::sample(options.shots, detail::max_cut_qaoa{},
-                                          theta, u, v, static_cast<int>(n),
-                                          options.layers));
+    std::vector<std::vector<std::string>> answers;
+    for (auto &s : detail::split(n, edges, options.qpu_qubits)) {
+      const auto counts = detail::qaoa_counts(s.size, s.edges, x0, options);
+      std::vector<std::pair<std::string, std::size_t>> ranked(counts.begin(),
+                                                              counts.end());
+      // Most frequent first, equal counts by bitstring (as for a whole graph).
+      std::sort(ranked.begin(), ranked.end(), [](auto &a, auto &b) {
+        return a.second > b.second ||
+               (a.second == b.second && a.first < b.first);
       });
+      ranked.resize(
+          std::min<std::size_t>(ranked.size(), options.subgraph_answers));
+      auto &kept = answers.emplace_back();
+      for (auto &[bits, count] : ranked)
+        kept.push_back(bits);
+      for (auto &[bits, count] : ranked) {
+        auto inverted = bits;
+        for (auto &b : inverted)
+          b = b == '0' ? '1' : '0';
+        kept.push_back(inverted);
+      }
+    }
+    return detail::merge(answers, edges);
+  }
 
-  const auto counts =
-      cudaq::sample(options.shots, detail::max_cut_qaoa{}, params, u, v,
-                    static_cast<int>(n), options.layers);
+  const auto counts = detail::qaoa_counts(
+      n, edges,
+      detail::initial_parameters(options.init_seed, 2 * options.layers),
+      options);
   max_cut_result result;
   std::size_t top = 0;
   for (auto &[bits, count] : counts)

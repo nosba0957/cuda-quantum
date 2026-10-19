@@ -109,6 +109,12 @@ std::printf("%s cuts %d edges\n", r.bitstring.c_str(), r.cut);
 `tol`, `density`, and `init_seed`. The defaults match
 `experiments-ethernet/qaoa_with_opt.py`. Bitstrings are clbit 0 first.
 
+A graph with more nodes than `qpu_qubits` (default 5) is split into subgraphs
+that share boundary nodes, solved one after another, and merged as the Python
+ADC-QAOA (`adc_qaoa_ethernet`) does; each subgraph keeps its
+`subgraph_answers` (default 1) most frequent bitstrings for the merge. This has
+been checked on the simulator only.
+
 ## Limits
 
 - OPNIC packets are fixed: at most 16 parameters in, and 5 measured bits per

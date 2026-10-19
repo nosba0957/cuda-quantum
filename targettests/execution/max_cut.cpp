@@ -13,7 +13,9 @@
 // cudaq::max_cut: graphs and initial parameters must match what networkx and
 // numpy give the user's Python QAOA scripts for the same seeds (expected values
 // below were produced by networkx 3.4.2 and numpy's legacy seeding), and the
-// solver must return a well-formed answer on the simulator.
+// solver must return a well-formed answer on the simulator. Graphs too large
+// for the QPU must be split as the Python ADC-QAOA splits them, and merged into
+// the best cut when every subgraph keeps all its bitstrings.
 
 #include <cstdio>
 #include <cudaq/algorithms/max_cut.h>
@@ -46,6 +48,21 @@ int main() {
     std::printf("\n");
   }
 
+  // Subgraphs of graphs too large for the QPU, as ADC-QAOA's `random_cut`
+  // splits driver.py's graph for the same seed (expected values from Python).
+  const int splits[][3] = {{12, 5, 4}, {8, 3, 3}, {11, 4, 4}, {20, 5, 4}};
+  for (auto [n, q, seed] : splits) {
+    int i = 0;
+    for (auto &s :
+         cudaq::detail::split(n, cudaq::erdos_renyi_graph(n, 0.5, seed), q)) {
+      std::printf("split n=%d q=%d seed=%d #%d: nodes %d..%d:", n, q, seed, i++,
+                  s.first, s.first + s.size - 1);
+      for (auto [a, b] : s.edges)
+        std::printf(" (%d,%d)", a, b);
+      std::printf("\n");
+    }
+  }
+
   // How close QAOA p=1 gets depends on shot noise and the starting point, so
   // only a well-formed, honestly scored answer is asserted.
   cudaq::set_random_seed(13);
@@ -58,6 +75,27 @@ int main() {
                       r.cut <= bruteForce(5, edges)
                   ? "well-formed"
                   : "MALFORMED");
+  std::printf("max_cut n=5 seed=1 result: %s cut=%d\n", r.bitstring.c_str(),
+              r.cut);
+
+  // When every subgraph keeps all its bitstrings (enough shots to see each),
+  // the merge joins every assignment of the graph, so it must find the best.
+  for (auto [n, q, seed] : splits) {
+    if (n > 12)
+      continue;
+    cudaq::max_cut_options options;
+    options.qpu_qubits = q;
+    options.subgraph_answers = 1 << n;
+    options.shots = 100000;
+    const auto edges = cudaq::erdos_renyi_graph(n, 0.5, seed);
+    const auto m = cudaq::max_cut(n, seed, options);
+    std::printf("split max_cut n=%d q=%d seed=%d: %s\n", n, q, seed,
+                m.bitstring.size() == std::size_t(n) &&
+                        m.cut == cudaq::detail::cut_value(m.bitstring, edges) &&
+                        m.cut == bruteForce(n, edges)
+                    ? "best cut"
+                    : "NOT BEST");
+  }
   return 0;
 }
 
@@ -76,5 +114,25 @@ int main() {
 // CHECK: graph n=12 seed=1099511627783: (0,5) (0,7) (0,8) (0,10) (0,11) (1,3) (1,6) (1,10) (1,11) (2,4) (2,10) (2,11) (3,4) (3,5) (3,10) (4,5) (4,7) (4,9) (4,10) (5,6) (5,7) (5,8) (5,9) (6,8) (6,9) (6,10) (7,8) (7,11) (8,9) (10,11)
 // CHECK: x0 dim=2: 2.353304971691 5.973514161360
 // CHECK: x0 dim=4: 2.353304971691 5.973514161360 4.599253580134 3.761482191925
+// CHECK: split n=12 q=5 seed=4 #0: nodes 0..4: (0,1) (0,2) (0,3) (0,4) (1,2) (1,3) (1,4) (3,4)
+// CHECK: split n=12 q=5 seed=4 #1: nodes 4..8: (0,4) (1,2) (1,4) (2,4) (3,4)
+// CHECK: split n=12 q=5 seed=4 #2: nodes 8..11: (0,1) (0,3) (2,3)
+// CHECK: split n=8 q=3 seed=3 #0: nodes 0..2: (0,1)
+// CHECK: split n=8 q=3 seed=3 #1: nodes 2..4: (0,1)
+// CHECK: split n=8 q=3 seed=3 #2: nodes 4..6: (1,2)
+// CHECK: split n=8 q=3 seed=3 #3: nodes 6..7: (0,1)
+// CHECK: split n=11 q=4 seed=4 #0: nodes 0..2: (0,1) (0,2)
+// CHECK: split n=11 q=4 seed=4 #1: nodes 2..4: (0,1) (0,2)
+// CHECK: split n=11 q=4 seed=4 #2: nodes 4..6: (0,2)
+// CHECK: split n=11 q=4 seed=4 #3: nodes 6..10: (0,1) (0,3) (0,4) (1,3) (2,3) (2,4)
+// CHECK: split n=20 q=5 seed=4 #0: nodes 0..4: (0,1) (0,2) (0,3) (0,4) (1,2) (1,3)
+// CHECK: split n=20 q=5 seed=4 #1: nodes 4..8: (0,1) (0,2) (0,3) (0,4) (2,3) (2,4) (3,4)
+// CHECK: split n=20 q=5 seed=4 #2: nodes 8..12: (0,1) (0,4) (1,2) (2,3) (2,4)
+// CHECK: split n=20 q=5 seed=4 #3: nodes 12..16: (0,4) (1,3) (1,4) (2,4)
+// CHECK: split n=20 q=5 seed=4 #4: nodes 16..19: (1,2) (2,3)
 // CHECK: max_cut n=5 seed=1: well-formed
+// CHECK: max_cut n=5 seed=1 result: 01001 cut=6
+// CHECK: split max_cut n=12 q=5 seed=4: best cut
+// CHECK: split max_cut n=8 q=3 seed=3: best cut
+// CHECK: split max_cut n=11 q=4 seed=4: best cut
 // clang-format on
