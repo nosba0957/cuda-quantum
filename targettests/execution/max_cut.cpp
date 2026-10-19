@@ -72,8 +72,7 @@ int main() {
     int i = 0;
     for (auto &s :
          cudaq::detail::split(n, cudaq::erdos_renyi_graph(n, 0.5, seed), q)) {
-      std::vector<int> order;
-      const auto edges = cudaq::detail::canonical_edges(s, order);
+      const auto [edges, order] = cudaq::detail::canonical_edges(s);
       std::printf("canonical n=%d q=%d seed=%d #%d: %d nodes:", n, q, seed, i++,
                   s.size);
       for (auto [a, b] : edges)
@@ -88,6 +87,44 @@ int main() {
                     cudaq::detail::original_order(bits, order), s.edges);
       }
       std::printf(" %s\n", same ? "same cuts" : "CUTS DIFFER");
+    }
+  }
+
+  // The renumbering's inverse: node i is node order[i] once renumbered, so a
+  // one-hot answer there maps back to one-hot at i. (8, 3, 3)'s third subgraph
+  // is renumbered by a 3-cycle, which a swapped inverse would get wrong.
+  {
+    const auto s =
+        cudaq::detail::split(8, cudaq::erdos_renyi_graph(8, 0.5, 3), 3)[2];
+    const auto [edges, order] = cudaq::detail::canonical_edges(s);
+    std::printf("renumbered n=8 q=3 seed=3 #2: order");
+    for (int o : order)
+      std::printf(" %d", o);
+    for (int i = 0; i < s.size; ++i) {
+      std::string renumbered(s.size, '0'), expected(s.size, '0');
+      renumbered[order[i]] = expected[i] = '1';
+      std::printf(" %s",
+                  cudaq::detail::original_order(renumbered, order) == expected
+                      ? "back"
+                      : "WRONG");
+    }
+    std::printf("\n");
+  }
+
+  // Settings that cannot work are refused before any QAOA runs.
+  {
+    cudaq::max_cut_options tiny;
+    tiny.qpu_qubits = 1;
+    cudaq::max_cut_options none;
+    none.subgraph_answers = 0;
+    none.qpu_qubits = 3;
+    for (auto &options : {tiny, none}) {
+      try {
+        cudaq::max_cut(8, 3, options);
+        std::printf("bad options: accepted\n");
+      } catch (const std::runtime_error &e) {
+        std::printf("bad options: %s\n", e.what());
+      }
     }
   }
 
@@ -197,6 +234,9 @@ int main() {
 // CHECK: canonical n=20 q=5 seed=4 #2: 5 nodes:{{.*}} same cuts
 // CHECK: canonical n=20 q=5 seed=4 #3: 5 nodes:{{.*}} same cuts
 // CHECK: canonical n=20 q=5 seed=4 #4: 4 nodes:{{.*}} same cuts
+// CHECK: renumbered n=8 q=3 seed=3 #2: order 2 0 1 back back back
+// CHECK: bad options: max_cut: qpu_qubits must be at least 2 to split a graph, got 1
+// CHECK: bad options: max_cut: subgraph_answers must be at least 1
 // CHECK: max_cut n=5 seed=1: well-formed
 // CHECK: max_cut n=5 seed=1 result: 01001 cut=6
 // CHECK: split max_cut n=12 q=5 seed=4: best cut

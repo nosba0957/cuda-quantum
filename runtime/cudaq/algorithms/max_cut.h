@@ -46,11 +46,14 @@ struct max_cut_options {
   /// Edge probability of the Erdos-Renyi graph.
   double density = 0.5;
   /// Seed of the initial parameters, drawn uniformly from [0, 2*pi) the way
-  /// `np.random.seed(s); np.random.uniform(0, 2*np.pi, 2*p)` draws them.
+  /// `np.random.seed(s); np.random.uniform(0, 2*np.pi, 2*p)` draws them. Used
+  /// only when the graph is not split; split runs start from a linear ramp.
   std::uint32_t init_seed = 42;
-  /// Qubits on the QPU. A graph with more nodes is split into subgraphs of at
-  /// most this many nodes; `max_cut` throws when the split's last subgraph is
-  /// larger (see `detail::split`).
+  /// Qubits on the QPU (q), at least 2 when the graph is split. A graph of n
+  /// nodes, n > q, is split into count = ceil((n-1)/(q-1)) subgraphs of
+  /// consecutive nodes starting n / count apart, each sharing its last node
+  /// with the next; the last takes all remaining nodes, and `max_cut` throws
+  /// when that leaves it more than q.
   int qpu_qubits = 5;
   /// Bitstrings each subgraph keeps for the merge, the most frequent first
   /// (ADC-QAOA's `--subqaoa_res_size`).
@@ -160,6 +163,32 @@ inline std::vector<double> initial_parameters(std::uint32_t seed, int dim) {
   return x;
 }
 
+/// ADC-QAOA's `linear_args(p, 0.56 * p)`: gammas ramping up from 0 and betas
+/// down to 0, the start of every split run.
+inline std::vector<double> linear_ramp(int layers) {
+  std::vector<double> x(2 * layers);
+  for (int l = 0; l < layers; ++l) {
+    const double t = (l + 0.5) / layers;
+    x[l] = 0.56 * t;
+    x[layers + l] = 0.56 * (1 - t);
+  }
+  return x;
+}
+
+/// The `k` most frequent bitstrings, most frequent first, equal counts by the
+/// lower bitstring.
+inline std::vector<std::string>
+most_frequent(std::vector<std::pair<std::string, std::size_t>> counts,
+              std::size_t k) {
+  std::sort(counts.begin(), counts.end(), [](auto &a, auto &b) {
+    return a.second > b.second || (a.second == b.second && a.first < b.first);
+  });
+  std::vector<std::string> top;
+  for (std::size_t i = 0; i < std::min(k, counts.size()); ++i)
+    top.push_back(counts[i].first);
+  return top;
+}
+
 inline int cut_value(const std::string &bits,
                      const std::vector<std::pair<int, int>> &edges) {
   int cut = 0;
@@ -198,27 +227,34 @@ split(int n, const std::vector<std::pair<int, int>> &edges, int qpu_qubits) {
   return parts;
 }
 
+/// A subgraph renumbered by `canonical_edges`.
+struct renumbering {
+  /// The subgraph's edges in the new numbering, sorted.
+  std::vector<std::pair<int, int>> edges;
+  /// `order[i]` is the new number of node i.
+  std::vector<int> order;
+};
+
 /// ADC-QAOA's renumbering of a subgraph into the order shared by every
 /// subgraph of its shape (`iso_reuse.canonical_key_and_perm`): of all
 /// renumberings, the one whose sorted edges come first. Same-shape subgraphs
-/// so get the same edges, the same circuit structure, and one compile. Returns
-/// those edges; `order[i]` is the new number of node i.
-inline std::vector<std::pair<int, int>>
-canonical_edges(const subgraph &s, std::vector<int> &order) {
+/// so get the same edges, the same circuit structure, and one compile.
+// ponytail: tries all size! renumberings: 120 at 5 qubits, 3.6M near 10, a
+// cliff. Past ~8 qubits, switch to a canonical labelling (nauty/bliss style
+// refinement) or key the compile cache on a cheaper isomorphism invariant.
+inline renumbering canonical_edges(const subgraph &s) {
   std::vector<int> perm(s.size);
   for (int i = 0; i < s.size; ++i)
     perm[i] = i;
-  std::vector<std::pair<int, int>> best;
+  renumbering best;
   do {
     std::vector<std::pair<int, int>> edges;
     for (auto [a, b] : s.edges)
       edges.emplace_back(std::min(perm[a], perm[b]),
                          std::max(perm[a], perm[b]));
     std::sort(edges.begin(), edges.end());
-    if (order.empty() || edges < best) {
-      best = std::move(edges);
-      order = perm;
-    }
+    if (best.order.empty() || edges < best.edges)
+      best = {std::move(edges), perm};
   } while (std::next_permutation(perm.begin(), perm.end()));
   return best;
 }
@@ -330,15 +366,17 @@ erdos_renyi_graph(std::size_t n, double p, std::uint64_t seed) {
 /// Python ADC-QAOA does. Runs on whatever target the program was compiled for.
 inline max_cut_result max_cut(std::size_t n, std::uint64_t seed,
                               const max_cut_options &options = {}) {
+  // Neighbouring subgraphs share a node, so each needs two qubits at least.
+  if (options.qpu_qubits < 2 &&
+      n > static_cast<std::size_t>(std::max(options.qpu_qubits, 0)))
+    throw std::runtime_error(
+        "max_cut: qpu_qubits must be at least 2 to split a graph, got " +
+        std::to_string(options.qpu_qubits));
+  if (options.subgraph_answers < 1)
+    throw std::runtime_error("max_cut: subgraph_answers must be at least 1");
   const auto edges = erdos_renyi_graph(n, options.density, seed);
   if (n > static_cast<std::size_t>(options.qpu_qubits)) {
-    // ADC-QAOA's start: `linear_args(p, 0.56 * p)`.
-    std::vector<double> x0(2 * options.layers);
-    for (int l = 0; l < options.layers; ++l) {
-      const double t = (l + 0.5) / options.layers;
-      x0[l] = 0.56 * t;
-      x0[options.layers + l] = 0.56 * (1 - t);
-    }
+    const auto x0 = detail::linear_ramp(options.layers);
     const auto parts = detail::split(n, edges, options.qpu_qubits);
     // The split's last subgraph can be larger than the QPU; stop before any
     // subgraph runs rather than ask the QPU for qubits it does not have.
@@ -352,43 +390,35 @@ inline max_cut_result max_cut(std::size_t n, std::uint64_t seed,
     for (auto &s : parts) {
       // Renumbered so that same-shape subgraphs share one compile; the answers
       // are put back in the subgraph's own order before anything else.
-      std::vector<int> order;
-      const auto counts = detail::qaoa_counts(
-          s.size, detail::canonical_edges(s, order), x0, options);
-      std::vector<std::pair<std::string, std::size_t>> ranked;
+      const auto [canonical, order] = detail::canonical_edges(s);
+      const auto counts = detail::qaoa_counts(s.size, canonical, x0, options);
+      std::vector<std::pair<std::string, std::size_t>> original;
       for (auto &[bits, count] : counts)
-        ranked.emplace_back(detail::original_order(bits, order), count);
-      // Most frequent first, equal counts by bitstring (as for a whole graph).
-      std::sort(ranked.begin(), ranked.end(), [](auto &a, auto &b) {
-        return a.second > b.second ||
-               (a.second == b.second && a.first < b.first);
-      });
-      ranked.resize(
-          std::min<std::size_t>(ranked.size(), options.subgraph_answers));
-      auto &kept = answers.emplace_back();
-      for (auto &[bits, count] : ranked)
-        kept.push_back(bits);
-      for (auto &[bits, count] : ranked) {
-        auto inverted = bits;
+        original.emplace_back(detail::original_order(bits, order), count);
+      auto &kept = answers.emplace_back(
+          detail::most_frequent(std::move(original), options.subgraph_answers));
+      const auto top = kept.size();
+      for (std::size_t i = 0; i < top; ++i) {
+        auto inverted = kept[i];
         for (auto &b : inverted)
           b = b == '0' ? '1' : '0';
-        kept.push_back(inverted);
+        // An inverse already kept would only repeat joinings, which cannot
+        // win the merge a second time.
+        if (std::find(kept.begin(), kept.end(), inverted) == kept.end())
+          kept.push_back(std::move(inverted));
       }
     }
     return detail::merge(answers, edges);
   }
 
   const auto counts = detail::qaoa_counts(
-      n, edges,
+      static_cast<int>(n), edges,
       detail::initial_parameters(options.init_seed, 2 * options.layers),
       options);
+  const auto top = detail::most_frequent({counts.begin(), counts.end()}, 1);
   max_cut_result result;
-  std::size_t top = 0;
-  for (auto &[bits, count] : counts)
-    if (count > top || (count == top && bits < result.bitstring)) {
-      top = count;
-      result.bitstring = bits;
-    }
+  if (!top.empty())
+    result.bitstring = top[0];
   result.cut = detail::cut_value(result.bitstring, edges);
   return result;
 }
