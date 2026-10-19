@@ -15,7 +15,9 @@
 // below were produced by networkx 3.4.2 and numpy's legacy seeding), and the
 // solver must return a well-formed answer on the simulator. Graphs too large
 // for the QPU must be split as the Python ADC-QAOA splits them, and merged into
-// the best cut when every subgraph keeps all its bitstrings.
+// the best cut when every subgraph keeps all its bitstrings. Subgraphs of the
+// same shape must be renumbered into the same edges (so one circuit structure),
+// without changing the merged answer.
 
 #include <cstdio>
 #include <cudaq/algorithms/max_cut.h>
@@ -63,6 +65,32 @@ int main() {
     }
   }
 
+  // Renumbering: isomorphic subgraphs get the same edges, and an answer over
+  // the renumbered nodes maps back to one with the same cut of the subgraph's
+  // own edges, for every bitstring.
+  for (auto [n, q, seed] : splits) {
+    int i = 0;
+    for (auto &s :
+         cudaq::detail::split(n, cudaq::erdos_renyi_graph(n, 0.5, seed), q)) {
+      std::vector<int> order;
+      const auto edges = cudaq::detail::canonical_edges(s, order);
+      std::printf("canonical n=%d q=%d seed=%d #%d: %d nodes:", n, q, seed, i++,
+                  s.size);
+      for (auto [a, b] : edges)
+        std::printf(" (%d,%d)", a, b);
+      bool same = true;
+      for (int m = 0; m < (1 << s.size); ++m) {
+        std::string bits(s.size, '0');
+        for (int j = 0; j < s.size; ++j)
+          bits[j] = '0' + ((m >> j) & 1);
+        same &= cudaq::detail::cut_value(bits, edges) ==
+                cudaq::detail::cut_value(
+                    cudaq::detail::original_order(bits, order), s.edges);
+      }
+      std::printf(" %s\n", same ? "same cuts" : "CUTS DIFFER");
+    }
+  }
+
   // How close QAOA p=1 gets depends on shot noise and the starting point, so
   // only a well-formed, honestly scored answer is asserted.
   cudaq::set_random_seed(13);
@@ -95,6 +123,21 @@ int main() {
                         m.cut == bruteForce(n, edges)
                     ? "best cut"
                     : "NOT BEST");
+  }
+
+  // The merged answers before renumbering was added, for the same seeds: each
+  // subgraph keeps one bitstring, so the merge depends on every boundary node
+  // being where it was. (8, 3, 3)'s third subgraph is renumbered. Shot noise
+  // lands on renumbered outcomes, so other seeds can differ.
+  const int unchanged[][4] = {{8, 3, 3, 1024}, {12, 5, 4, 100000}};
+  for (auto [n, q, seed, shots] : unchanged) {
+    cudaq::set_random_seed(13);
+    cudaq::max_cut_options options;
+    options.qpu_qubits = q;
+    options.shots = shots;
+    const auto m = cudaq::max_cut(n, seed, options);
+    std::printf("default max_cut n=%d q=%d seed=%d: %s cut=%d\n", n, q, seed,
+                m.bitstring.c_str(), m.cut);
   }
   return 0;
 }
@@ -130,9 +173,27 @@ int main() {
 // CHECK: split n=20 q=5 seed=4 #2: nodes 8..12: (0,1) (0,4) (1,2) (2,3) (2,4)
 // CHECK: split n=20 q=5 seed=4 #3: nodes 12..16: (0,4) (1,3) (1,4) (2,4)
 // CHECK: split n=20 q=5 seed=4 #4: nodes 16..19: (1,2) (2,3)
+// CHECK: canonical n=12 q=5 seed=4 #0: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=12 q=5 seed=4 #1: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=12 q=5 seed=4 #2: 4 nodes:{{.*}} same cuts
+// CHECK: canonical n=8 q=3 seed=3 #0: 3 nodes: (0,1) same cuts
+// CHECK: canonical n=8 q=3 seed=3 #1: 3 nodes: (0,1) same cuts
+// CHECK: canonical n=8 q=3 seed=3 #2: 3 nodes: (0,1) same cuts
+// CHECK: canonical n=8 q=3 seed=3 #3: 2 nodes: (0,1) same cuts
+// CHECK: canonical n=11 q=4 seed=4 #0: 3 nodes: (0,1) (0,2) same cuts
+// CHECK: canonical n=11 q=4 seed=4 #1: 3 nodes: (0,1) (0,2) same cuts
+// CHECK: canonical n=11 q=4 seed=4 #2: 3 nodes: (0,1) same cuts
+// CHECK: canonical n=11 q=4 seed=4 #3: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=20 q=5 seed=4 #0: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=20 q=5 seed=4 #1: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=20 q=5 seed=4 #2: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=20 q=5 seed=4 #3: 5 nodes:{{.*}} same cuts
+// CHECK: canonical n=20 q=5 seed=4 #4: 4 nodes:{{.*}} same cuts
 // CHECK: max_cut n=5 seed=1: well-formed
 // CHECK: max_cut n=5 seed=1 result: 01001 cut=6
 // CHECK: split max_cut n=12 q=5 seed=4: best cut
 // CHECK: split max_cut n=8 q=3 seed=3: best cut
 // CHECK: split max_cut n=11 q=4 seed=4: best cut
+// CHECK: default max_cut n=8 q=3 seed=3: 01101010 cut=8
+// CHECK: default max_cut n=12 q=5 seed=4: 001111010101 cut=19
 // clang-format on

@@ -10,7 +10,8 @@
 // would for the same seed, optimize a QAOA circuit for it with COBYLA on the
 // host, and return the most frequent bitstring at the best parameters. A graph
 // with more nodes than the QPU has qubits is split into subgraphs, solved one
-// after another, and merged, as the Python ADC-QAOA does (ADR 0002).
+// after another, and merged, as the Python ADC-QAOA does (ADR 0002);
+// subgraphs of the same shape are renumbered to share one compile.
 
 #pragma once
 
@@ -195,6 +196,41 @@ split(int n, const std::vector<std::pair<int, int>> &edges, int qpu_qubits) {
   return parts;
 }
 
+/// ADC-QAOA's renumbering of a subgraph into the order shared by every
+/// subgraph of its shape (`iso_reuse.canonical_key_and_perm`): of all
+/// renumberings, the one whose sorted edges come first. Same-shape subgraphs
+/// so get the same edges, the same circuit structure, and one compile. Returns
+/// those edges; `order[i]` is the new number of node i.
+inline std::vector<std::pair<int, int>>
+canonical_edges(const subgraph &s, std::vector<int> &order) {
+  std::vector<int> perm(s.size);
+  for (int i = 0; i < s.size; ++i)
+    perm[i] = i;
+  std::vector<std::pair<int, int>> best;
+  do {
+    std::vector<std::pair<int, int>> edges;
+    for (auto [a, b] : s.edges)
+      edges.emplace_back(std::min(perm[a], perm[b]),
+                         std::max(perm[a], perm[b]));
+    std::sort(edges.begin(), edges.end());
+    if (order.empty() || edges < best) {
+      best = std::move(edges);
+      order = perm;
+    }
+  } while (std::next_permutation(perm.begin(), perm.end()));
+  return best;
+}
+
+/// An answer over the renumbered nodes of `canonical_edges`, back in the
+/// subgraph's own order, so its boundary nodes are first and last again.
+inline std::string original_order(const std::string &bits,
+                                  const std::vector<int> &order) {
+  std::string original(order.size(), '0');
+  for (std::size_t i = 0; i < order.size(); ++i)
+    original[i] = bits[order[i]];
+  return original;
+}
+
 /// Optimizes QAOA for the graph with COBYLA from `x0` and samples it at the
 /// best parameters found.
 inline sample_result qaoa_counts(int n,
@@ -303,9 +339,14 @@ inline max_cut_result max_cut(std::size_t n, std::uint64_t seed,
     }
     std::vector<std::vector<std::string>> answers;
     for (auto &s : detail::split(n, edges, options.qpu_qubits)) {
-      const auto counts = detail::qaoa_counts(s.size, s.edges, x0, options);
-      std::vector<std::pair<std::string, std::size_t>> ranked(counts.begin(),
-                                                              counts.end());
+      // Renumbered so that same-shape subgraphs share one compile; the answers
+      // are put back in the subgraph's own order before anything else.
+      std::vector<int> order;
+      const auto counts = detail::qaoa_counts(
+          s.size, detail::canonical_edges(s, order), x0, options);
+      std::vector<std::pair<std::string, std::size_t>> ranked;
+      for (auto &[bits, count] : counts)
+        ranked.emplace_back(detail::original_order(bits, order), count);
       // Most frequent first, equal counts by bitstring (as for a whole graph).
       std::sort(ranked.begin(), ranked.end(), [](auto &a, auto &b) {
         return a.second > b.second ||

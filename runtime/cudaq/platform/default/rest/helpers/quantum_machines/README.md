@@ -112,8 +112,10 @@ std::printf("%s cuts %d edges\n", r.bitstring.c_str(), r.cut);
 A graph with more nodes than `qpu_qubits` (default 5) is split into subgraphs
 that share boundary nodes, solved one after another, and merged as the Python
 ADC-QAOA (`adc_qaoa_ethernet`) does; each subgraph keeps its
-`subgraph_answers` (default 1) most frequent bitstrings for the merge. This has
-been checked on the simulator only.
+`subgraph_answers` (default 1) most frequent bitstrings for the merge.
+Subgraphs of the same shape are renumbered into one order first, so they share
+one compiled program (checked offline on the fake OPNIC card); the merge itself
+has been checked on the simulator only.
 
 ## Limits
 

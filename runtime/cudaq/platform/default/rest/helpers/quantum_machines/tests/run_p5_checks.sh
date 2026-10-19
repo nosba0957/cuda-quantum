@@ -18,7 +18,9 @@
 # Offline it runs three times: Ethernet (baked, a compile per evaluation),
 # streamed (--qm-parametric: one compile, two values pushed per evaluation),
 # and OPNIC over an in-process fake of the card (one compile, nothing over
-# gRPC but setup, and the waiting job cancelled at the end).
+# gRPC but setup, and the waiting job cancelled at the end). Then, on the fake
+# card, the P5c spike and tests/p5_split.cpp: four subgraphs of two shapes,
+# two compiles.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -111,6 +113,8 @@ docker run --rm -v "$root":/workspace -v "$work":/work \
     --quantum_machines-url unused '"$src"' -o /work/qaoa.out
   [ '"$live"' = 1 ] || /workspace/build/bin/nvq++ --target quantum_machines \
     --quantum_machines-url unused tests/p5c_live.cpp -o /work/live.out
+  [ '"$live"' = 1 ] || /workspace/build/bin/nvq++ --target quantum_machines \
+    --quantum_machines-url unused tests/p5_split.cpp -o /work/split.out
   chown '"$(id -u):$(id -g)"' /work/*.out'
 
 if [ "$live" = 1 ]; then
@@ -172,6 +176,13 @@ else
   cancels=$(grep -c 'JobService/Cancel' "$work/rpc.jsonl" || true)
   check "the first job cancelled before the second, the second at close ($cancels)" \
     "[ $cancels -eq 2 ]"
+
+  echo; echo "### OPNIC, fake link: a split max_cut compiles once per subgraph shape"
+  start_mock
+  bin=split.out run_qaoa --qm-transport-opnic --qm-opnic-fake "$results" "$@"
+  check "the merged answer came back" "grep -q '^split max_cut ' '$work/run.log'"
+  c=$(compiles)
+  check "a Compile per shape, not per subgraph ($c)" "[ $c -eq 2 ]"
 fi
 
 echo
