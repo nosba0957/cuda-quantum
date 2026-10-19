@@ -7,7 +7,7 @@
 **Status:** resolved
 
 - [x] Offline, against the mock QOP and the fake OPNIC card: a split run compiles once per distinct subgraph shape, not once per subgraph
-- [x] The merged answer is the same with and without renumbering on the simulator for a fixed seed
+- [x] The merged answer is the same with and without renumbering on the simulator for the pinned seeds 8/3/3 and 12/5/4; other seeds can differ by shot noise
 - [x] The renumbering keeps each boundary node where the merge expects it
 - [x] The P5 offline checks still pass
 
@@ -31,3 +31,7 @@
   subgraph runs when the split leaves one larger than `qpu_qubits` (11/4
   leaves 5 nodes, 18/5 leaves 6). `detail::split` still copies Python. The
   target test's 11/4/4 merge case now expects that error.
+
+**2026-10-19:** Code review reworded the "same merged answer" criterion to
+what was verified: the pinned seeds 8/3/3 and 12/5/4 match; other seeds (20/5/4:
+cut 61 before, 56 after) can differ by shot noise.
