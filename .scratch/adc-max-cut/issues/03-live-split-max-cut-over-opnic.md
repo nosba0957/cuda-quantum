@@ -4,9 +4,21 @@
 
 **Blocked by:** 01 (`max_cut` splits large graphs on the simulator), 02 (Same-shape subgraphs share one compile)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] The run finishes and returns a bitstring for all 9 nodes
-- [ ] The QM id is printed at open and close, and nothing is left open
-- [ ] The compile count is recorded
-- [ ] The cut is recorded, not judged: the chip's readout is skewed (qubit 0 reads 0, qubit 1 reads 1)
+- [x] The run finishes and returns a bitstring for all 9 nodes
+- [x] The QM id is printed at open and close, and nothing is left open
+- [x] The compile count is recorded
+- [x] The cut is recorded, not judged: the chip's readout is skewed (qubit 0 reads 0, qubit 1 reads 1)
+
+## Comments
+
+**2026-10-19:** run live over OPNIC with the user's go-ahead:
+`P5_SRC=tests/p5c_live.cpp run_p5_checks.sh --live --n 9 --maxeval 3 --qm-transport-opnic`.
+It opened and closed `QM-1ae12d9d-e862-4b8e-a2a1-684a33070d68` and nothing
+was left open. The whole run took 41 s and returned `001001001`, cut 13 (the
+graph has 25 edges and a best cut of 17). The three subgraphs
+(`0–3`, `3–6`, `6–8`) all have different shapes, so 3 compiles are expected.
+The live run does not log compiles, so that count comes from the offline check
+(one compile per shape), not from this run. The cut is not judged, because
+the chip's readout is skewed.
