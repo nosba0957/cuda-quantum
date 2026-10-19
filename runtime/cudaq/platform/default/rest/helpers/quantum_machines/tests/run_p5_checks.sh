@@ -12,7 +12,8 @@
 #   bash run_p5_checks.sh [args]          mock QOP, no hardware touched
 #   bash run_p5_checks.sh --live [args]   REAL OPX1000: opens a machine, plays pulses
 #   P5_SRC=tests/p5c_live.cpp bash run_p5_checks.sh --live [args]
-#       the P5c live programs instead (see that file); live only
+#       the P5c live programs instead (see that file; --n 9 runs a split
+#       max_cut); live only
 #
 # args go to the binary first, so --maxeval/--layers/--qm-* override defaults.
 # Offline it runs three times: Ethernet (baked, a compile per evaluation),
@@ -100,8 +101,10 @@ run_qaoa() {
   if [ "${bin:-qaoa.out}" = qaoa.out ] && [ "$src" = tests/p5_qaoa.cpp ]; then
     check "COBYLA evaluated the cost"     "[ ${evals:-0} -ge 2 ]"
     check "the loop reported a best cut"  "grep -q '^best cut=' '$work/run.log'"
+    echo "     $evals evaluations in ${elapsed}s"
+  else
+    echo "     ran in ${elapsed}s"
   fi
-  echo "     $evals evaluations in ${elapsed}s"
 }
 
 echo "### nvq++"

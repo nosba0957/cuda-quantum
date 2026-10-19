@@ -114,8 +114,9 @@ that share boundary nodes, solved one after another, and merged as the Python
 ADC-QAOA (`adc_qaoa_ethernet`) does; each subgraph keeps its
 `subgraph_answers` (default 1) most frequent bitstrings for the merge.
 Subgraphs of the same shape are renumbered into one order first, so they share
-one compiled program (checked offline on the fake OPNIC card); the merge itself
-has been checked on the simulator only. As in Python, the last subgraph takes
+one compiled program (checked offline on the fake OPNIC card). A 9-node split
+has run live over OPNIC (`--n 9` below); its cut quality is judged on the
+simulator only, because the chip's readout is skewed. As in Python, the last subgraph takes
 every remaining node and can be larger than `qpu_qubits` (`n` 18 with
 `qpu_qubits` 5 leaves 6); `max_cut` then throws before any subgraph runs.
 
@@ -139,6 +140,7 @@ bash tests/run_p5_checks.sh            # QAOA on all transports; OPNIC uses a fa
 bash tests/run_p5_checks.sh --live --maxeval 2
 P5_SRC=tests/p5c_live.cpp bash tests/run_p5_checks.sh --live --spike --qm-transport-opnic
 P5_SRC=tests/p5c_live.cpp bash tests/run_p5_checks.sh --live --maxeval 10 --qm-transport-opnic
+P5_SRC=tests/p5c_live.cpp bash tests/run_p5_checks.sh --live --n 9 --maxeval 3 --qm-transport-opnic
 ```
 
 `run_p2_checks.sh`, `run_p3_checks.sh`, and `run_p4_checks.sh` cover the gRPC

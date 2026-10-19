@@ -8,7 +8,7 @@
 
 - [x] The run finishes and returns a bitstring for all 9 nodes
 - [x] The QM id is printed at open and close, and nothing is left open
-- [x] The compile count is recorded
+- [x] The expected compile count is recorded (the live run does not log compiles)
 - [x] The cut is recorded, not judged: the chip's readout is skewed (qubit 0 reads 0, qubit 1 reads 1)
 
 ## Comments
@@ -20,5 +20,6 @@ was left open. The whole run took 41 s and returned `001001001`, cut 13 (the
 graph has 25 edges and a best cut of 17). The three subgraphs
 (`0–3`, `3–6`, `6–8`) all have different shapes, so 3 compiles are expected.
 The live run does not log compiles, so that count comes from the offline check
-(one compile per shape), not from this run. The cut is not judged, because
+(one compile per shape, shown there for `max_cut(8, 3)` on 3 qubits), not from
+this run: 3 is a prediction from the three shapes. The cut is not judged, because
 the chip's readout is skewed.
