@@ -39,3 +39,19 @@ _Avoid_: gRPC mode, client stream
 Parameters and results travel over the OPNIC card's fiber link to the OPX; the
 program is compiled once per circuit structure.
 _Avoid_: fiber mode, NVQLink mode
+
+**Max-Cut graph**:
+The problem a Max-Cut run solves: an unweighted graph whose nodes are split
+into two sides so that as many edges as possible cross between them.
+_Avoid_: graph structure (that sounds like a circuit structure, which is a circuit,
+not a problem), instance
+
+**Subgraph**:
+One part of a Max-Cut graph too large for the QPU, solved by its own QAOA run;
+the answers of all subgraphs are merged into one cut of the whole graph.
+_Avoid_: piece, chunk, SubQAOA
+
+**Boundary node**:
+The one node two neighbouring subgraphs share. The merge joins their answers
+only where they put it on the same side.
+_Avoid_: overlap node, connection point
