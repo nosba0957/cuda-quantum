@@ -9,9 +9,26 @@
 
 **Blocked by:** None (can start immediately)
 
-**Status:** ready-for-agent
+**Status:** resolved
 
-- [ ] For the same seed, the subgraphs match Python's split of `driver.py`'s graph (golden values produced by Python, as the existing target test does)
-- [ ] With every subgraph keeping all its bitstrings, the merged cut equals the brute-force best for graphs up to 12 nodes
-- [ ] `max_cut(5, 1)` gives the same result as before this ticket
-- [ ] The existing `max_cut` target test still passes
+- [x] For the same seed, the subgraphs match Python's split of `driver.py`'s graph (golden values produced by Python, as the existing target test does)
+- [x] With every subgraph keeping all its bitstrings, the merged cut equals the brute-force best for graphs up to 12 nodes
+- [x] `max_cut(5, 1)` gives the same result as before this ticket
+- [x] The existing `max_cut` target test still passes
+
+## Comments
+
+**2026-10-19:** Done in 243b3f6a3b; `targettests/execution/max_cut.cpp` passes
+on the simulator (qpp), no OPX contact.
+
+- Split: `detail::split` matches Python's `random_cut` (nodes and edges of every
+  subgraph) for n/q/seed = 12/5/4, 8/3/3, 11/4/4, 20/5/4. Python's last
+  subgraph can exceed `qpu_qubits` (11/4/4 gives a 5-node one); copied as is.
+- Merge: with every bitstring kept (100000 shots), 12/5/4, 8/3/3 and 11/4/4
+  all reach the brute-force best cut. Breaking the boundary join fails it.
+- `max_cut(5, 1)` (random seed 13) gives `01001`, cut 6, as before; now pinned.
+- Differences from Python: COBYLA's step is still `initial_step` (0.5;
+  scipy's default is 1.0) and `tol` is NLopt's relative f-tolerance, not
+  scipy's rhoend. For p > 1 the start is the intended linear ramp; Python's
+  circuit reads its `[betas, gammas]` vector interleaved (same at p = 1).
+  Ties between equal counts or cuts are broken by bitstring / first found.
