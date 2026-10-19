@@ -10,7 +10,8 @@
 //
 //   ./a.out --spike <--qm-* settings>       two circuit structures, one
 //       evaluation of one 128-shot packet each, on streams initialised once
-//   ./a.out [--maxeval N] [--seed S] <--qm-* settings>   cudaq::max_cut(5, S)
+//   ./a.out [--n N] [--maxeval M] [--seed S] <--qm-* settings>
+//       cudaq::max_cut(N, S), N = 5 by default; a larger N is split
 //
 // Exits non-zero on a wrong shot count or a malformed answer.
 
@@ -70,11 +71,12 @@ static int run(int argc, char **argv) {
 
   cudaq::max_cut_options options;
   options.max_eval = intArg(argc, argv, "--maxeval", 100);
+  const int n = intArg(argc, argv, "--n", 5);
   const int seed = intArg(argc, argv, "--seed", 1);
-  const auto r = cudaq::max_cut(5, seed, options);
-  std::printf("max_cut n=5 seed=%d: bitstring=%s cut=%d\n", seed,
+  const auto r = cudaq::max_cut(n, seed, options);
+  std::printf("max_cut n=%d seed=%d: bitstring=%s cut=%d\n", n, seed,
               r.bitstring.c_str(), r.cut);
-  if (r.bitstring.size() != 5 || r.cut < 0)
+  if (r.bitstring.size() != static_cast<std::size_t>(n) || r.cut < 0)
     throw std::runtime_error("max_cut: malformed answer");
   return 0;
 }
