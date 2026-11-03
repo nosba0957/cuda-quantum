@@ -22,3 +22,8 @@ The OPNIC calls sit behind a narrow link interface, so a Realtime-based link
 can replace `libopnic` later without touching the parameter table or
 `max_cut`. Revisit this when a workload needs the OPX to call the GPU inside
 one shot.
+
+Revisited on 2026-11-03 and confirmed: the QAOA loop is driven by the host
+between evaluations, and Realtime's microseconds are lost in an evaluation of
+about 84 ms. `libopnic-cuda.so` on `gh1` is QM's GPU-memory variant of the same
+streams, not a Realtime bridge.
