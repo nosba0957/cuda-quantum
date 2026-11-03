@@ -27,3 +27,11 @@ Revisited on 2026-11-03 and confirmed: the QAOA loop is driven by the host
 between evaluations, and Realtime's microseconds are lost in an evaluation of
 about 84 ms. `libopnic-cuda.so` on `gh1` is QM's GPU-memory variant of the same
 streams, not a Realtime bridge.
+
+No GPU optimizer either, though `libopnic-cuda.so` can land OPNIC packets in
+GPU memory. In the ADC-QAOA OPNIC campaign on as-qpu-10q9c
+(`experiments/ADC-QAOA/ADC-QAOA/results/opt_passes_20261027_10q9c_r2/`), a
+COBYLA step on the CPU takes about 46 µs against a QPU round trip of 15-22 ms.
+At 512 nodes with graph cache and switch, the optimizer is 0.05 s of a 31.6 s
+run and the round trips are 23.4 s (74%). Faster classical code cannot shorten
+the shots; fewer evaluations, fewer shots or shorter programs can.
