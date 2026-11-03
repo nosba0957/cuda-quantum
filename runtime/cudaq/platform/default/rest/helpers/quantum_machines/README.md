@@ -120,6 +120,87 @@ simulator only, because the chip's readout is skewed. As in Python, the last sub
 every remaining node and can be larger than `qpu_qubits` (`n` 18 with
 `qpu_qubits` 5 leaves 6); `max_cut` then throws before any subgraph runs.
 
+### From the binary to the OPX
+
+`nvq++` does not turn the kernel into a circuit. It stores the kernel as Quake,
+a recipe whose loops run over edges it does not know yet. The circuit is
+finished at run time, on every `cudaq::sample` call, from that call's
+arguments. One kernel therefore gives a different circuit for each subgraph
+shape, and the executor compiles each shape once.
+
+```text
+=========================  COMPILE TIME  (once)  ===========================
+
+  nvq++ --target quantum_machines my_program.cpp -o my_program
+                 |
+                 |  my_program.cpp + max_cut.h are split in two:
+                 v
+   +------------------------------+     +------------------------------+
+   | normal C++ code              |     | the __qpu__ kernel           |
+   |  main, max_cut, DIVIDE,      |     |  detail::max_cut_qaoa        |
+   |  COBYLA loop, MERGE          |     |                              |
+   |        |                     |     |        | cudaq-quake         |
+   |        v                     |     |        v                     |
+   |  machine code (x86/ARM)      |     |  Quake (CUDA-Q's circuit IR) |
+   +------------------------------+     |  kept as text in the binary, |
+                 |                      |  edges still unknown         |
+                 |                      +------------------------------+
+                 |                                   |
+                 +---------------+-------------------+
+                                 |  linked with the CUDA-Q runtime:
+                                 |   libcudaq, libcudaq-rest-qpu
+                                 |   (QMExecutor + gRPC client),
+                                 |   QM server helper
+                                 v
+                            ./my_program
+
+==========================  RUN TIME  =======================================
+
+ ./my_program --qm-transport-opnic ...
+     |
+     v
+ main() --> cudaq::max_cut(9, seed)                       [your binary]
+              |
+              |  DIVIDE --> subgraphs {0-3}, {3-6}, {6-8}
+              |
+              |  for each subgraph:  COBYLA loop
+              |     |
+              |     v
+              |   cudaq::sample(max_cut_qaoa, theta, u, v, n, layers)
+              |     |
+ - - - - - - -|- - -|- - - - - - - - - - - - - - - - - - - - - - - - - - - -
+              |     v                                  [CUDA-Q runtime]
+              |   +----------------------------------------------------+
+              |   | JIT: take the stored Quake, plug in this subgraph's|
+              |   |      u, v, n, layers  (loops unrolled to gates)    |
+              |   |      theta stays open                              |
+              |   |        |                                           |
+              |   |        v  passes from quantum_machines.yml         |
+              |   |   decompose gates --> parameter-table pass         |
+              |   |   (theta becomes p0, p1, ...)                      |
+              |   |        |                                           |
+              |   |        v                                           |
+              |   |   OpenQASM 2 text  =  the circuit structure        |
+              |   +----------------------------------------------------+
+              |     |
+              |     v
+              |   QMExecutor: seen this circuit structure before?
+              |     no  --> qua_build.py (Python) --> QUA program
+              |             --> gRPC Compile + queue on the OPX (once)
+              |     yes --> skip
+              |     |
+              |     v
+              |   OPNIC card: send theta  ---->  OPX plays shots
+              |               get bits    <----
+              |     |
+              |     v
+              |   counts --> back to COBYLA --> next theta ...
+              |
+              |  keep top-k bitstrings, renumber back
+              v
+            MERGE --> result: bitstring, cut                  [your binary]
+```
+
 ## Limits
 
 - OPNIC packets are fixed: at most 16 parameters in, and 5 measured bits per
