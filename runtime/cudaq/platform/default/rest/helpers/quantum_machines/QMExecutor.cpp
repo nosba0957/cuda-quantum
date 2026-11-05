@@ -712,7 +712,8 @@ std::vector<double> QMExecutor::streamedValues(const QMProgram &program,
 
 std::map<std::string, CountsDictionary>
 QMExecutor::receiveOpnic(QMProgram &program) {
-  const auto bits = opnic->receive(program.opnicPackets);
+  const auto bits = opnic->receive(
+      program.opnicPackets, std::chrono::seconds(config.resultTimeoutSeconds));
   std::map<std::string, CountsDictionary> counts;
   for (std::size_t shot = 0; shot < program.shots; ++shot) {
     const auto *row = bits.data() + shot * qm::OpnicMaxBits;

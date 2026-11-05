@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <string>
@@ -51,9 +52,10 @@ public:
   /// Sends one evaluation's parameters, zero-padded to OpnicMaxParams.
   virtual void send(const std::vector<double> &params) = 0;
 
-  /// Blocks for one evaluation's `packets` result packets. Returns their bits
-  /// shot-major with stride OpnicMaxBits.
-  virtual std::vector<std::int32_t> receive(std::size_t packets) = 0;
+  /// Blocks for one evaluation's `packets` result packets, throwing after
+  /// `timeout`. Returns their bits shot-major with stride OpnicMaxBits.
+  virtual std::vector<std::int32_t> receive(std::size_t packets,
+                                            std::chrono::seconds timeout) = 0;
 };
 
 } // namespace cudaq::qm

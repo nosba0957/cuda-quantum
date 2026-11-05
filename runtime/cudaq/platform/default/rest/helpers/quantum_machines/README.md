@@ -93,7 +93,7 @@ argument.
 | `reset-attempts` | `1` | active-reset retries |
 | `opnic-in`, `opnic-out` | `987`, `654` | OPNIC stream ids, host to OPX and OPX to host |
 | `opnic-serial` | the only card | OPNIC card serial |
-| `opnic-fake` | | comma-separated bitstrings: a fake card, for tests |
+| `opnic-fake` | | comma-separated bitstrings: a fake card, for tests (`silent`: one that never answers) |
 | `result-timeout` | `120` | seconds to wait for one evaluation's results |
 
 ## Max-Cut in one call

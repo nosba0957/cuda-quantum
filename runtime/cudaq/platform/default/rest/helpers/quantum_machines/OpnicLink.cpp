@@ -77,6 +77,11 @@ private:
 class FakeOpx : public ::qm::stream::Configurator {
 public:
   FakeOpx(const std::string &results, std::string log) : log(std::move(log)) {
+    // "silent" reads every parameter packet and answers none: a stalled OPX.
+    if (results == "silent") {
+      silent = true;
+      return;
+    }
     std::stringstream ss(results);
     for (std::string s; std::getline(ss, s, ',');)
       if (!s.empty())
@@ -139,6 +144,8 @@ private:
           out << (k ? "," : "") << packet.params[k];
         out << "]\n";
       }
+      if (silent)
+        continue;
       // Like the OPX, every packet is sent; shots past `shots` are padding.
       for (std::size_t p = 0, shot = 0; p < packets; ++p) {
         ResultPacket result;
@@ -159,6 +166,7 @@ private:
 
   std::vector<std::string> bitstrings;
   std::string log;
+  bool silent = false;
   std::atomic<bool> stop{false};
   std::thread worker;
   std::uint32_t *paramRing = nullptr, *resultRing = nullptr,
@@ -256,7 +264,19 @@ public:
     params->send(packet);
   }
 
-  std::vector<std::int32_t> receive(std::size_t packets) override {
+  std::vector<std::int32_t> receive(std::size_t packets,
+                                    std::chrono::seconds timeout) override {
+    // The SDK's wait_for_packets spins with no deadline, so a stalled OPX
+    // would hang the host forever. Spin here instead, with one; once enough
+    // packets are in, the SDK's wait returns at once and copies them out.
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (results->available_packets() < packets)
+      if (std::chrono::steady_clock::now() > deadline)
+        throw std::runtime_error(
+            "quantum_machines: timed out after " +
+            std::to_string(timeout.count()) + "s waiting for " +
+            std::to_string(packets) +
+            " OPNIC result packets; is the job still running on the OPX?");
     results->wait_for_packets(packets);
     std::vector<std::int32_t> bits;
     bits.reserve(packets * OpnicShotsPerPacket * OpnicMaxBits);

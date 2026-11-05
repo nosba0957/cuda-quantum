@@ -21,7 +21,7 @@
 # and OPNIC over an in-process fake of the card (one compile, nothing over
 # gRPC but setup, and the waiting job cancelled at the end). Then, on the fake
 # card, the P5c spike and tests/p5_split.cpp: four subgraphs of two shapes,
-# two compiles.
+# two compiles; last, a silent card, whose wait for results must time out.
 set -euo pipefail
 
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -97,7 +97,7 @@ run_qaoa() {
   elapsed=$(( $(date +%s) - start ))
   set -e
   evals=$(grep -c '^eval ' "$work/run.log" || true)
-  check "binary exited 0"               "[ $rc -eq 0 ]"
+  check "binary exited ${want_rc:-0}"   "[ $rc -eq ${want_rc:-0} ]"
   if [ "${bin:-qaoa.out}" = qaoa.out ] && [ "$src" = tests/p5_qaoa.cpp ]; then
     check "COBYLA evaluated the cost"     "[ ${evals:-0} -ge 2 ]"
     check "the loop reported a best cut"  "grep -q '^best cut=' '$work/run.log'"
@@ -186,6 +186,15 @@ else
   check "the merged answer came back" "grep -q '^split max_cut ' '$work/run.log'"
   c=$(compiles)
   check "a Compile per shape, not per subgraph ($c)" "[ $c -eq 2 ]"
+
+  echo; echo "### OPNIC, fake link: a card that never answers times out"
+  start_mock
+  want_rc=1 bin=live.out run_qaoa --spike --qm-transport-opnic \
+    --qm-opnic-fake silent --qm-result-timeout 2 "$@"
+  check "the wait for results timed out" \
+    "grep -q 'timed out after 2s waiting for 1 OPNIC result packets' '$work/run.log'"
+  check "the job left waiting is cancelled" \
+    "grep -q 'JobService/Cancel' '$work/rpc.jsonl'"
 fi
 
 echo
