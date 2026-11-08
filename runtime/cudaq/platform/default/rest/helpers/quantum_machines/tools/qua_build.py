@@ -10,7 +10,8 @@
 """OpenQASM 2.0 on stdin -> serialized QuaProgram on stdout.
 
 Angles printed as `a*pK+b` become runtime parameters fed by a QUA input
-stream, unless --bind bakes values in.
+stream, unless --bind bakes values in. A gate printed as `if(pK==1) ...` (the
+edge-mask pass) runs only when parameter pK, streamed the same way, is 1.
 """
 
 import argparse
@@ -31,6 +32,9 @@ _SENTINEL = 1.0e6
 # which qiskit.qasm2 rejects as an unresolvable broadcast.
 _MEAS = re.compile(r"^(\s*measure\s+)([A-Za-z_]\w*)(\s*->\s*[A-Za-z_]\w*\[\d+\]\s*;)")
 _QREG = re.compile(r"^\s*qreg\s+([A-Za-z_]\w*)\s*\[\s*(\d+)\s*\]\s*;")
+# The edge-mask pass guards a gate by a 0/1 parameter as `if(pK==1) <gate>`.
+_IF = re.compile(r"^\s*if\s*\(\s*p(\d+)\s*==\s*1\s*\)\s*")
+_MASK_REG = re.compile(r"p\d+")
 
 
 def normalize_qasm(text):
@@ -57,6 +61,9 @@ def parametric_qasm(text):
     exprs = {}
     out = []
     for line in text.splitlines():
+        guard = _IF.match(line)
+        head = guard.group(0) if guard else ""
+        line = line[len(head):]
         m = _ARGS.match(line)
         if m and "p" in m.group(2):
             args = []
@@ -71,29 +78,104 @@ def parametric_qasm(text):
                 exprs[s] = (int(e.group(2)), float(e.group(1)), float(e.group(3) or 0))
                 args.append(repr(s))
             line = f"{m.group(1)}({','.join(args)}){line[m.end():]}"
-        out.append(line)
+        out.append(head + line)
     return "\n".join(out) + "\n", exprs
 
 
-def attach_parameters(qc, exprs):
-    """Replace sentinel angles with `a * Parameter("pK") + b`."""
+def masked_qasm(text):
+    """Declare the `creg pK[1]` each `if(pK==1)` needs to parse."""
+    lines = text.splitlines()
+    ks = sorted({int(m.group(1)) for m in map(_IF.match, lines) if m})
+    if not ks:
+        return text
+    at = next(i for i, line in enumerate(lines) if _QREG.match(line)) + 1
+    lines[at:at] = [f"creg p{k}[1];" for k in ks]
+    return "\n".join(lines) + "\n"
+
+
+def attach_parameters(qc, exprs, bind=None):
+    """Replace sentinel angles with `a * Parameter("pK") + b`, and each
+    `if(pK==1)` on its creg with an `if_test` on a Bool input variable pK.
+
+    Consecutive gates guarded by the same pK share one `if_test`. With `bind`
+    (values of p0, p1, ...) a guarded gate is kept or dropped instead.
+    """
+    from qiskit import QuantumCircuit
     from qiskit.circuit import Parameter
 
     params = {}
-    out = qc.copy_empty_like()
+    masks = {}
+
+    def angles(op):
+        if not any(isinstance(v, float) and v in exprs for v in op.params):
+            return op
+        new = []
+        for v in op.params:
+            if isinstance(v, float) and v in exprs:
+                k, a, b = exprs[v]
+                v = a * params.setdefault(k, Parameter(f"p{k}")) + b
+            new.append(v)
+        op = op.copy()
+        op.params = new
+        return op
+
+    def guard(inst):
+        """The K of an `if(pK==1)`, or None."""
+        if inst.operation.name != "if_else":
+            return None
+        reg, value = inst.operation.condition
+        if not _MASK_REG.fullmatch(getattr(reg, "name", "")) or value != 1:
+            raise SystemExit(f"unsupported condition {inst.operation.condition}")
+        return int(reg.name[1:])
+
+    groups = []  # (K or None, [instruction])
     for inst in qc.data:
-        op = inst.operation
-        if any(isinstance(v, float) and v in exprs for v in op.params):
-            new = []
-            for v in op.params:
-                if isinstance(v, float) and v in exprs:
-                    k, a, b = exprs[v]
-                    v = a * params.setdefault(k, Parameter(f"p{k}")) + b
-                new.append(v)
-            op = op.copy()
-            op.params = new
-        out.append(op, inst.qubits, inst.clbits)
+        k = guard(inst)
+        if k is not None and groups and groups[-1][0] == k:
+            groups[-1][1].append(inst)
+        else:
+            groups.append((k, [inst]))
+
+    out = QuantumCircuit(*qc.qregs,
+                         *[c for c in qc.cregs if not _MASK_REG.fullmatch(c.name)])
+    for k, insts in groups:
+        if k is None:
+            for inst in insts:
+                out.append(angles(inst.operation), inst.qubits, inst.clbits)
+            continue
+        body = []
+        for inst in insts:
+            block = inst.operation.blocks[0]
+            for b in block.data:
+                qubits = [inst.qubits[block.find_bit(q).index] for q in b.qubits]
+                body.append((angles(b.operation), qubits))
+        if bind is not None:
+            if k >= len(bind):
+                raise SystemExit(f"--bind has {len(bind)} values; p{k} unbound")
+            if bind[k] > 0.5:
+                for op, qubits in body:
+                    out.append(op, qubits)
+            continue
+        if k not in masks:
+            from qiskit.circuit.classical import types
+            masks[k] = out.add_input(f"p{k}", types.Bool())
+        with out.if_test(masks[k]):
+            for op, qubits in body:
+                out.append(op, qubits)
     return out
+
+
+def instructions(qc):
+    """Every instruction, those inside control flow included."""
+    for inst in qc.data:
+        yield inst
+        for block in getattr(inst.operation, "blocks", ()):
+            yield from instructions(block)
+
+
+def runtime_values(qc):
+    """The angle parameters and mask inputs pK, in K order."""
+    return sorted([*qc.parameters, *qc.iter_input_vars()], key=_index)
 
 
 def _index(p):
@@ -146,8 +228,13 @@ def periodic(qc, params):
     Then shifting it by 2*pi shifts every angle by whole turns, so the C++ side
     may fold the value it pushes into [-pi, pi) to fit fixed.
     """
-    whole = {p: True for p in params}
-    for inst in qc.data:
+    from qiskit.circuit import Parameter
+
+    # A mask is 0 or 1, never folded.
+    whole = {p: isinstance(p, Parameter) for p in params}
+    for inst in instructions(qc):
+        if inst.operation.name == "if_else":
+            continue  # its params are its blocks, walked on their own
         for v in inst.operation.params:
             if getattr(v, "parameters", None):
                 for p, c in affine(v)[1].items():
@@ -157,15 +244,32 @@ def periodic(qc, params):
 
 
 def emit_circuit(qc, machine, param_map):
-    from qiskit.circuit import ParameterExpression
-    from qm.qua import assign, declare
+    from qm.qua import declare
 
-    idx = {q: qc.find_bit(q).index for q in qc.qubits}
     cregs = {c.name: declare(bool, value=[False] * c.size) for c in qc.cregs}
+    emit_block(qc, qc, {q: qc.find_bit(q).index for q in qc.qubits}, machine,
+               param_map, cregs)
+    return cregs
 
-    for inst in qc.data:
+
+def emit_block(qc, block, idx, machine, param_map, cregs):
+    """Emit `block`, whose qubit q is machine.active_qubits[idx[q]]."""
+    from qiskit.circuit import ParameterExpression
+    from qm.qua import assign, if_
+
+    for inst in block.data:
         op, qubits = inst.operation, inst.qubits
         name = op.name
+
+        if name == "if_else":
+            # Only the edge-mask pass's guards: a mask input, no else branch.
+            if op.blocks[1:] and op.blocks[1] is not None and op.blocks[1].data:
+                raise ValueError("if_else with an else branch is not supported")
+            body = op.blocks[0]
+            inner = {q: idx[qubits[body.find_bit(q).index]] for q in body.qubits}
+            with if_(param_map[op.condition] > 0.5):
+                emit_block(qc, body, inner, machine, param_map, cregs)
+            continue
 
         if name == "barrier":
             qs = [machine.active_qubits[idx[q]] for q in qubits]
@@ -208,8 +312,6 @@ def emit_circuit(qc, machine, param_map):
 
         if crosses:
             qubit.align()
-
-    return cregs
 
 
 def build(qc, machine, params, shots, iterations, stream_name):
@@ -424,7 +526,9 @@ def main(argv=None):
 
     text = open(args.qasm).read() if args.qasm else sys.stdin.read()
     text, exprs = parametric_qasm(normalize_qasm(text))
-    qc = attach_parameters(qasm2.loads(text), exprs)
+    bind = (None if args.bind is None else
+            [float(v) for v in args.bind.split(",") if v.strip()])
+    qc = attach_parameters(qasm2.loads(masked_qasm(text)), exprs, bind)
     if not qc.cregs:
         raise SystemExit("circuit has no classical register, nothing to measure")
 
@@ -441,21 +545,24 @@ def main(argv=None):
         if args.reset_type == "thermalize":
             reset.thermalize_time = machine.active_qubits[i].thermalization_time
 
-    if args.bind is not None:
-        values = [float(v) for v in args.bind.split(",") if v.strip()]
-        missing = [p.name for p in qc.parameters if _index(p) >= len(values)]
+    if bind is not None:
+        missing = [p.name for p in qc.parameters if _index(p) >= len(bind)]
         if missing:
-            raise SystemExit(f"--bind has {len(values)} values; {missing} unbound")
-        qc = qc.assign_parameters({p: values[_index(p)] for p in qc.parameters})
+            raise SystemExit(f"--bind has {len(bind)} values; {missing} unbound")
+        qc = qc.assign_parameters({p: bind[_index(p)] for p in qc.parameters})
 
+    target = create_target(machine)
+    if "if_else" not in target:
+        from qiskit.circuit import IfElseOp
+        target.add_instruction(IfElseOp, name="if_else")
     qc = transpile(qc,
-                   target=create_target(machine),
+                   target=target,
                    initial_layout=layout,
                    optimization_level=args.optimization_level)
     if not has_reset_at_boundary(qc):
         qc = ensure_resets_for_active_qubits(qc)
 
-    params = sorted(qc.parameters, key=_index)
+    params = runtime_values(qc)
     opnic = args.opnic_in is not None and args.opnic_out is not None
     if opnic:
         prog, packets = build_opnic(qc, machine, params, args.shots,

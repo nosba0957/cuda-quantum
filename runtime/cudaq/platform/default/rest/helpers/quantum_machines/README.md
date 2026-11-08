@@ -10,8 +10,9 @@ transport* are defined in [`GLOSSARY.md`](../../../../../../../GLOSSARY.md).
 ```text
  cudaq::sample(...) or cudaq::max_cut(n, seed)
         |
- CUDA-Q JIT: kernel -> Quake -> parameter-table pass -> OpenQASM 2
-        |    (a std::vector<double> argument stays open as p0, p1, ...)
+ CUDA-Q JIT: kernel -> Quake -> parameter-table, edge-mask passes -> OpenQASM 2
+        |    (a std::vector<double> argument stays open as p0, p1, ...;
+        |     a QAOA graph's edges become a 0/1 mask after them)
         |
  QMExecutor (this directory)
         |  new circuit structure? -> tools/qua_build.py (Python subprocess):
@@ -113,8 +114,14 @@ A graph with more nodes than `qpu_qubits` (default 5) is split into subgraphs
 that share boundary nodes, solved one after another, and merged as the Python
 ADC-QAOA (`adc_qaoa_ethernet`) does; each subgraph keeps its
 `subgraph_answers` (default 1) most frequent bitstrings for the merge.
-Subgraphs of the same shape are renumbered into one order first, so they share
-one compiled program (checked offline on the fake OPNIC card). A 9-node split
+Every subgraph on the same number of qubits shares one compiled program (checked
+offline on the fake OPNIC card): the `edge-mask` pass, after `parameter-table`,
+replaces each QAOA cost layer by the ZZ on every qubit pair, each one behind
+`if(pK==1)`, and appends the graph's 0/1 edge mask to the parameters. The
+OPX then reads the mask from the same packet as the angles and skips the
+pairs that are not edges, as ADC-QAOA's `opnic_dgx_opx/switch/` does with a
+Qiskit `switch`. On 5 qubits that is 10 mask values next to the angles, within
+the OPNIC packet's 16. A 9-node split
 has run live over OPNIC (`--n 9` below); its cut quality is judged on the
 simulator only, because the chip's readout is skewed. As in Python, the last subgraph takes
 every remaining node and can be larger than `qpu_qubits` (`n` 18 with
@@ -125,8 +132,8 @@ every remaining node and can be larger than `qpu_qubits` (`n` 18 with
 `nvq++` does not turn the kernel into a circuit. It stores the kernel as Quake,
 a recipe whose loops run over edges it does not know yet. The circuit is
 finished at run time, on every `cudaq::sample` call, from that call's
-arguments. One kernel therefore gives a different circuit for each subgraph
-shape, and the executor compiles each shape once.
+arguments. The edge-mask pass then turns the edges into parameters, so one
+kernel gives one circuit per qubit count, and the executor compiles each once.
 
 ```text
 =========================  COMPILE TIME  (once)  ===========================
@@ -177,7 +184,9 @@ shape, and the executor compiles each shape once.
               |   |        |                                           |
               |   |        v  passes from quantum_machines.yml         |
               |   |   decompose gates --> parameter-table pass         |
-              |   |   (theta becomes p0, p1, ...)                      |
+              |   |   (theta becomes p0, p1, ...)  --> edge-mask pass  |
+              |   |   (every pair's ZZ behind if(pK==1); the edges     |
+              |   |    become a 0/1 mask after theta)                  |
               |   |        |                                           |
               |   |        v                                           |
               |   |   OpenQASM 2 text  =  the circuit structure        |
@@ -190,7 +199,7 @@ shape, and the executor compiles each shape once.
               |     yes --> skip
               |     |
               |     v
-              |   OPNIC card: send theta  ---->  OPX plays shots
+              |   OPNIC card: send theta + mask -> OPX plays shots
               |               get bits    <----
               |     |
               |     v

@@ -311,6 +311,12 @@ static LogicalResult emitOperation(cudaq::Emitter &emitter,
   if (failed(translateOperatorName(optor, name)))
     return optor.emitError("cannot convert operation to OpenQASM 2.0.");
 
+  // Set by the edge-mask pass. OpenQASM 2.0 conditions on a creg; consumers
+  // declare `creg pK[1]` and feed it the parameter.
+  if (auto k =
+          optor->getAttrOfType<IntegerAttr>(cudaq::conditionParameterAttrName))
+    emitter.os << "if(p" << k.getInt() << "==1) ";
+
   if (optor.isAdj()) {
     std::vector<std::string> validAdjointOps{"s", "t"};
     if (std::find(validAdjointOps.begin(), validAdjointOps.end(), name.str()) ==

@@ -16,11 +16,13 @@
 #       max_cut); live only
 #
 # args go to the binary first, so --maxeval/--layers/--qm-* override defaults.
-# Offline it runs three times: Ethernet (baked, a compile per evaluation),
-# streamed (--qm-parametric: one compile, two values pushed per evaluation),
+# Offline it first checks qua_build.py's edge-mask guards (check_edge_mask.py),
+# then runs three times: Ethernet (baked, a compile per evaluation), streamed
+# (--qm-parametric: one compile; gamma, beta and the ring's edge mask pushed
+# per evaluation),
 # and OPNIC over an in-process fake of the card (one compile, nothing over
 # gRPC but setup, and the waiting job cancelled at the end). Then, on the fake
-# card, the P5c spike and tests/p5_split.cpp: four subgraphs of two shapes,
+# card, the P5c spike and tests/p5_split.cpp: four subgraphs on 3 or 2 qubits,
 # two compiles; last, a silent card, whose wait for results must time out.
 set -euo pipefail
 
@@ -133,6 +135,9 @@ else
   results=$("$py" -c "print(','.join(['01010','00000']*($shots//2)))")
   compiles() { grep -c "QmService/Compile" "$work/rpc.jsonl" || true; }
 
+  echo "### qua_build.py: edge-mask guards equal plain QAOA for every mask"
+  check "check_edge_mask.py" "'$py' '$here/check_edge_mask.py'"
+
   echo; echo "### Ethernet: parameters baked in, a compile per evaluation"
   start_mock
   run_qaoa --maxeval 6 "$@"
@@ -143,7 +148,11 @@ else
   check "nothing pushed" "! grep -q PushToInputStream '$work/rpc.jsonl'"
   check "results not yet registered are retried" "grep -q '\"missing\": true' '$work/rpc.jsonl'"
 
-  echo; echo "### Streamed: compiled once, two values pushed per evaluation"
+  # The edge-mask pass puts the ring's edges among all 10 pairs of 5 qubits,
+  # (0,1) (0,2) ... (3,4), as parameters p2..p11 after gamma and beta.
+  ring_mask="[1,0,0,1,1,0,0,1,0,1]"
+
+  echo; echo "### Streamed: compiled once, gamma, beta and the edge mask pushed per evaluation"
   start_mock
   run_qaoa --maxeval 6 --qm-parametric 1 "$@"
   check "every eval decoded to cut=2" "! grep '^eval ' '$work/run.log' | grep -qv 'cut=2.0000'"
@@ -151,8 +160,8 @@ else
   check "one Compile for the whole optimization ($c)" "[ $c -eq 1 ]"
   pushes=$(grep -c PushToInputStream "$work/rpc.jsonl" || true)
   check "a push per sample ($pushes)" "[ $pushes -eq $((evals + 1)) ]"
-  check "each push carries exactly gamma and beta" \
-    "\"$py\" -c 'import json,sys; v=[json.loads(l) for l in open(sys.argv[1])]; p=[e for e in v if e[\"method\"].endswith(\"PushToInputStream\")]; sys.exit(0 if p and all(len(e[\"values\"])==2 for e in p) else 1)' '$work/rpc.jsonl'"
+  check "each push carries gamma, beta and the ring's edge mask" \
+    "\"$py\" -c 'import json,sys; v=[json.loads(l) for l in open(sys.argv[1])]; p=[e for e in v if e[\"method\"].endswith(\"PushToInputStream\")]; sys.exit(0 if p and all(e[\"values\"][2:]==$ring_mask for e in p) else 1)' '$work/rpc.jsonl'"
 
   echo; echo "### OPNIC, fake link: compiled once, parameters and bits over OPNIC"
   start_mock
@@ -165,8 +174,8 @@ else
     "! grep -qE 'PushToInputStream|GetNamedResults' '$work/rpc.jsonl'"
   packets=$(wc -l < "$work/opnic.jsonl" 2>/dev/null || echo 0)
   check "an OPNIC parameter packet per sample ($packets)" "[ $packets -eq $((evals + 1)) ]"
-  check "each packet is gamma, beta and 14 zeros of padding" \
-    "\"$py\" -c 'import json,sys; p=[json.loads(l) for l in open(sys.argv[1])]; sys.exit(0 if p and all(len(v)==16 and not any(v[2:]) and any(v[:2]) for v in p) else 1)' '$work/opnic.jsonl'"
+  check "each packet is gamma, beta, the edge mask and 4 zeros of padding" \
+    "\"$py\" -c 'import json,sys; p=[json.loads(l) for l in open(sys.argv[1])]; sys.exit(0 if p and all(len(v)==16 and v[2:12]==$ring_mask and not any(v[12:]) and any(v[:2]) for v in p) else 1)' '$work/opnic.jsonl'"
   check "the job left waiting for parameters is cancelled" \
     "grep -q 'JobService/Cancel' '$work/rpc.jsonl'"
 
@@ -180,12 +189,12 @@ else
   check "the first job cancelled before the second, the second at close ($cancels)" \
     "[ $cancels -eq 2 ]"
 
-  echo; echo "### OPNIC, fake link: a split max_cut compiles once per subgraph shape"
+  echo; echo "### OPNIC, fake link: a split max_cut compiles once per qubit count"
   start_mock
   bin=split.out run_qaoa --qm-transport-opnic --qm-opnic-fake "$results" "$@"
   check "the merged answer came back" "grep -q '^split max_cut ' '$work/run.log'"
   c=$(compiles)
-  check "a Compile per shape, not per subgraph ($c)" "[ $c -eq 2 ]"
+  check "a Compile per qubit count, not per subgraph ($c)" "[ $c -eq 2 ]"
 
   echo; echo "### OPNIC, fake link: a card that never answers times out"
   start_mock

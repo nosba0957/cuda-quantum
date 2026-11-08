@@ -448,6 +448,31 @@ def DistributedDeviceCall : Pass<"distributed-device-call", "mlir::ModuleOp"> {
   ];
 }
 
+def EdgeMask : Pass<"edge-mask", "mlir::ModuleOp"> {
+  let summary = "Guard every qubit pair's ZZ by an open 0/1 parameter.";
+  let description = [{
+    Runs after `parameter-table`, on a single-block entry point whose qubits
+    all come from one sized `quake.alloca` at constant indices.
+
+    A ZZ is `x [a] b; rz(t) b; x [a] b`. A run is ZZs with no other quantum
+    operation between them. When every run has the same angle within it, and
+    all runs cover the same set of distinct pairs (QAOA cost layers), each run
+    is replaced by the ZZ on every pair (i, j), i < j, of the n qubits, in
+    lexicographic order. The ZZs of a run are diagonal, so reordering them
+    keeps the circuit's meaning.
+
+    Each new operator gets `cudaq.condition_parameter = K`: it applies only
+    when variational parameter K is 1. The n(n-1)/2 mask values, 1 for a pair
+    the circuit had, are appended to `cudaq.variational_parameters` (created
+    if absent). Every graph on n qubits so gives the same circuit, and a
+    target that streams parameters compiles it once.
+
+    Anything else leaves the module unchanged.
+  }];
+
+  let dependentDialects = ["mlir::arith::ArithDialect"];
+}
+
 def EraseNoise : Pass<"erase-noise"> {
   let summary = "Erase the injection of noise via Kraus channels.";
   let description = [{

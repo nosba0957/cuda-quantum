@@ -1,0 +1,122 @@
+// ========================================================================== //
+// Copyright (c) 2026 NVIDIA Corporation & Affiliates.                        //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+// RUN: cudaq-opt --edge-mask --split-input-file %s | FileCheck %s
+
+// QAOA on the path 0-1-2: the cost layer becomes all three pairs, each ZZ
+// guarded by a mask parameter after p0 and p1, and the mask is appended to
+// the parameter values: pairs (0,1) and (1,2) present, (0,2) absent.
+
+// CHECK: module attributes {cudaq.variational_parameters = array<f64: 5.000000e-01, 2.500000e-01, 1.000000e+00, 0.000000e+00, 1.000000e+00>}
+module attributes {cudaq.variational_parameters = array<f64: 0.5, 0.25>} {
+  func.func @__nvqpp__mlirgen__path(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %zero = arith.constant 0.000000e+00 : f64
+    %q = quake.alloca !quake.veq<3>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<3>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<3>) -> !quake.ref
+    %q2 = quake.extract_ref %q[2] : (!quake.veq<3>) -> !quake.ref
+    quake.h %q0 : (!quake.ref) -> ()
+    quake.h %q1 : (!quake.ref) -> ()
+    quake.h %q2 : (!quake.ref) -> ()
+    quake.x [%q1] %q2 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%zero) %q2 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p0"]}
+    quake.x [%q1] %q2 : (!quake.ref, !quake.ref) -> ()
+    quake.x [%q1] %q0 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%zero) %q0 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p0"]}
+    quake.x [%q1] %q0 : (!quake.ref, !quake.ref) -> ()
+    quake.rx (%zero) %q0 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p1"]}
+    quake.rx (%zero) %q1 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p1"]}
+    quake.rx (%zero) %q2 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p1"]}
+    %m = quake.mz %q : (!quake.veq<3>) -> !cc.stdvec<!quake.measure>
+    return
+  }
+}
+
+// CHECK-LABEL: func.func @__nvqpp__mlirgen__path(
+// CHECK:         %[[Q0:.*]] = quake.extract_ref %{{.*}}[0]
+// CHECK:         %[[Q1:.*]] = quake.extract_ref %{{.*}}[1]
+// CHECK:         %[[Q2:.*]] = quake.extract_ref %{{.*}}[2]
+// CHECK-COUNT-3: quake.h
+// CHECK-NEXT:    quake.x [%[[Q0]]] %[[Q1]] : {{.*}} {cudaq.condition_parameter = 2 : i64}
+// CHECK-NEXT:    quake.rz (%{{.*}}) %[[Q1]] : {{.*}} {cudaq.condition_parameter = 2 : i64, cudaq.parameter_exprs = ["2*p0"]}
+// CHECK-NEXT:    quake.x [%[[Q0]]] %[[Q1]] : {{.*}} {cudaq.condition_parameter = 2 : i64}
+// CHECK-NEXT:    quake.x [%[[Q0]]] %[[Q2]] : {{.*}} {cudaq.condition_parameter = 3 : i64}
+// CHECK-NEXT:    quake.rz (%{{.*}}) %[[Q2]] : {{.*}} {cudaq.condition_parameter = 3 : i64, cudaq.parameter_exprs = ["2*p0"]}
+// CHECK-NEXT:    quake.x [%[[Q0]]] %[[Q2]] : {{.*}} {cudaq.condition_parameter = 3 : i64}
+// CHECK-NEXT:    quake.x [%[[Q1]]] %[[Q2]] : {{.*}} {cudaq.condition_parameter = 4 : i64}
+// CHECK-NEXT:    quake.rz (%{{.*}}) %[[Q2]] : {{.*}} {cudaq.condition_parameter = 4 : i64, cudaq.parameter_exprs = ["2*p0"]}
+// CHECK-NEXT:    quake.x [%[[Q1]]] %[[Q2]] : {{.*}} {cudaq.condition_parameter = 4 : i64}
+// CHECK-NEXT:    quake.rx
+// CHECK-NOT:     cudaq.condition_parameter
+// CHECK:         return
+
+// -----
+
+// Two layers, two angles: each run is expanded with its own angle.
+
+// CHECK-LABEL: func.func @__nvqpp__mlirgen__layers(
+// CHECK:         quake.rz (%{{.*}}) %{{.*}} : {{.*}} {cudaq.condition_parameter = 4 : i64, cudaq.parameter_exprs = ["2*p0"]}
+// CHECK:         quake.rx
+// CHECK:         quake.rz (%{{.*}}) %{{.*}} : {{.*}} {cudaq.condition_parameter = 4 : i64, cudaq.parameter_exprs = ["2*p1"]}
+module attributes {cudaq.variational_parameters = array<f64: 0.1, 0.2, 0.3, 0.4>} {
+  func.func @__nvqpp__mlirgen__layers(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %zero = arith.constant 0.000000e+00 : f64
+    %q = quake.alloca !quake.veq<2>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<2>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<2>) -> !quake.ref
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%zero) %q1 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p0"]}
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rx (%zero) %q0 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p2"]}
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%zero) %q1 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p1"]}
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    return
+  }
+}
+
+// -----
+
+// Layers over different edges cannot share one mask: unchanged.
+
+// CHECK: module attributes {cudaq.variational_parameters = array<f64: 1.000000e-01, 2.000000e-01>}
+// CHECK-NOT: cudaq.condition_parameter
+module attributes {cudaq.variational_parameters = array<f64: 0.1, 0.2>} {
+  func.func @__nvqpp__mlirgen__mismatch(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %zero = arith.constant 0.000000e+00 : f64
+    %q = quake.alloca !quake.veq<3>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<3>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<3>) -> !quake.ref
+    %q2 = quake.extract_ref %q[2] : (!quake.veq<3>) -> !quake.ref
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%zero) %q1 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p0"]}
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.h %q0 : (!quake.ref) -> ()
+    quake.x [%q1] %q2 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%zero) %q2 : (f64, !quake.ref) -> () {cudaq.parameter_exprs = ["2*p1"]}
+    quake.x [%q1] %q2 : (!quake.ref, !quake.ref) -> ()
+    return
+  }
+}
+
+// -----
+
+// No ZZ at all: no mask is added.
+
+// CHECK-NOT: cudaq.variational_parameters
+// CHECK-NOT: cudaq.condition_parameter
+module {
+  func.func @__nvqpp__mlirgen__bell() attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %q = quake.alloca !quake.veq<2>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<2>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<2>) -> !quake.ref
+    quake.h %q0 : (!quake.ref) -> ()
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    return
+  }
+}

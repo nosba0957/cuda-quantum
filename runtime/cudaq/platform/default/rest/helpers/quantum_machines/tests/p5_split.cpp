@@ -7,9 +7,9 @@
  ******************************************************************************/
 
 // A split cudaq::max_cut on the OPX, offline only (run_p5_checks.sh): the
-// 8-node graph of seed 3 on a 3-qubit QPU splits into four subgraphs of two
-// shapes, three alike (one of them numbered differently) and one 2-node one,
-// so renumbering must leave two compiles, not three.
+// 8-node graph of seed 3 on a 3-qubit QPU splits into four subgraphs, three
+// on 3 qubits and one on 2. The edge-mask pass makes every graph on the same
+// qubit count one circuit, so this is two compiles, not four.
 //
 //   ./a.out [--maxeval N] <--qm-* settings>
 

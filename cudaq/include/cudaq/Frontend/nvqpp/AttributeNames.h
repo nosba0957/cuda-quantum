@@ -38,4 +38,10 @@ static constexpr const char variationalParametersAttrName[] =
 /// when the operand is an ordinary constant. Printed by code emitters.
 static constexpr const char parameterExprsAttrName[] = "cudaq.parameter_exprs";
 
+/// Attribute on a quantum operator: the index K of a variational parameter
+/// that is 0 or 1, the operator applying only when it is 1. Set by the
+/// `edge-mask` pass and printed by code emitters as `if(pK==1)`.
+static constexpr const char conditionParameterAttrName[] =
+    "cudaq.condition_parameter";
+
 } // namespace cudaq

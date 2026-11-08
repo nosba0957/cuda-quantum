@@ -31,6 +31,7 @@ add_cudaq_library(OptTransforms
   DecompositionPatternSelection.cpp
   DesugarCableOps.cpp
   DistributedDeviceCall.cpp
+  EdgeMask.cpp
   EraseNoise.cpp
   EraseNopCalls.cpp
   EraseQEC.cpp
