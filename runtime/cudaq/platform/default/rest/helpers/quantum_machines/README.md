@@ -120,8 +120,8 @@ replaces each QAOA cost layer by the ZZ on every qubit pair, each one behind
 `if(pK==1)`, and appends the graph's 0/1 edge mask to the parameters. The
 OPX then reads the mask from the same packet as the angles and skips the
 pairs that are not edges, as ADC-QAOA's `opnic_dgx_opx/switch/` does with a
-Qiskit `switch`. On 5 qubits that is 10 mask values next to the angles, within
-the OPNIC packet's 16. A 9-node split
+Qiskit `switch`. On 5 qubits that is 10 mask values next to the 2 angles per
+layer, so OPNIC runs at most 3 layers there (2·3 + 10 = 16). A 9-node split
 has run live over OPNIC (`--n 9` below); its cut quality is judged on the
 simulator only, because the chip's readout is skewed. As in Python, the last subgraph takes
 every remaining node and can be larger than `qpu_qubits` (`n` 18 with
@@ -213,7 +213,9 @@ kernel gives one circuit per qubit count, and the executor compiles each once.
 ## Limits
 
 - OPNIC packets are fixed: at most 16 parameters in, and 5 measured bits per
-  shot out (128 shots per packet).
+  shot out (128 shots per packet). A masked QAOA on n qubits uses
+  n(n-1)/2 of the 16 for its edge mask: at most 3 layers on 5 qubits, and
+  6 or more qubits do not fit.
 - Only `a * param + b` angles stay parametric. Any other use of a parameter
   bakes in its value and recompiles each time, with a warning.
 - The QOP cluster is shared. Every run prints `quantum_machines: opened QM-...`

@@ -123,12 +123,15 @@ public:
         pairs.emplace(std::min(zz.a, zz.b), std::max(zz.a, zz.b));
       return pairs;
     };
+    // The angle must be a variational parameter: a fixed-angle ZZ is not a
+    // QAOA cost layer, and masking it would make a plain kernel parametric.
     const auto edges = pairsOf(runs.front());
     for (auto &run : runs) {
       if (run.size() != edges.size() || pairsOf(run) != edges)
         return;
       for (auto &zz : run)
-        if (!angleOf(zz).first || angleOf(zz) != angleOf(run.front()))
+        if (!angleOf(zz).first || !angleOf(zz).second ||
+            angleOf(zz) != angleOf(run.front()))
           return;
     }
 
@@ -145,16 +148,14 @@ public:
     mod->setAttr(cudaq::variationalParametersAttrName,
                  DenseF64ArrayAttr::get(&getContext(), values));
 
+    // New extracts right after the alloca dominate every clone; the kernel's
+    // own may come after the first cost layer.
     OpBuilder builder(&getContext());
-    SmallVector<Value> qubit(n);
-    for (auto ext : body.getOps<quake::ExtractRefOp>())
-      if (auto i = index(ext); i >= 0 && !qubit[i])
-        qubit[i] = ext;
     builder.setInsertionPointAfter(alloca);
+    SmallVector<Value> qubit;
     for (int64_t i = 0; i < n; ++i)
-      if (!qubit[i])
-        qubit[i] = quake::ExtractRefOp::create(builder, alloca.getLoc(), alloca,
-                                               (std::size_t)i);
+      qubit.push_back(quake::ExtractRefOp::create(
+          builder, alloca.getLoc(), alloca, static_cast<std::size_t>(i)));
 
     for (auto &run : runs) {
       // The last ZZ's angle is defined before every insertion point.

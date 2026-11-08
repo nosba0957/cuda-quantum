@@ -1,0 +1,47 @@
+// ========================================================================== //
+// Copyright (c) 2026 NVIDIA Corporation & Affiliates.                        //
+// All rights reserved.                                                       //
+//                                                                            //
+// This source code and the accompanying materials are made available under   //
+// the terms of the Apache License 2.0 which accompanies this distribution.   //
+// ========================================================================== //
+
+// RUN: cudaq-opt --parameter-table --edge-mask %s | cudaq-translate --convert-to=openqasm2 | FileCheck %s
+
+// Each ZZ the edge-mask pass guards is printed behind `if(pK==1)`. Qubit 2 is
+// first extracted after the cost layer, so its guarded ZZs need the pass's own
+// extracts.
+
+module attributes {cudaq.variational_parameters = array<f64: 0.5, 0.25>} {
+  func.func @__nvqpp__mlirgen__qaoa(%arg0: !cc.stdvec<f64>) attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %two = arith.constant 2.000000e+00 : f64
+    %q = quake.alloca !quake.veq<3>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<3>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<3>) -> !quake.ref
+    %data = cc.stdvec_data %arg0 : (!cc.stdvec<f64>) -> !cc.ptr<!cc.array<f64 x ?>>
+    %p0ptr = cc.cast %data : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p0 = cc.load %p0ptr : !cc.ptr<f64>
+    %g = arith.mulf %p0, %two : f64
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%g) %q1 : (f64, !quake.ref) -> ()
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    %q2 = quake.extract_ref %q[2] : (!quake.veq<3>) -> !quake.ref
+    %p1ptr = cc.compute_ptr %data[1] : (!cc.ptr<!cc.array<f64 x ?>>) -> !cc.ptr<f64>
+    %p1 = cc.load %p1ptr : !cc.ptr<f64>
+    %b = arith.mulf %p1, %two : f64
+    quake.rx (%b) %q2 : (f64, !quake.ref) -> ()
+    return
+  }
+}
+
+// CHECK: qreg var0[3];
+// CHECK-NEXT: if(p2==1) cx var0[0], var0[1];
+// CHECK-NEXT: if(p2==1) rz(2*p0) var0[1];
+// CHECK-NEXT: if(p2==1) cx var0[0], var0[1];
+// CHECK-NEXT: if(p3==1) cx var0[0], var0[2];
+// CHECK-NEXT: if(p3==1) rz(2*p0) var0[2];
+// CHECK-NEXT: if(p3==1) cx var0[0], var0[2];
+// CHECK-NEXT: if(p4==1) cx var0[1], var0[2];
+// CHECK-NEXT: if(p4==1) rz(2*p0) var0[2];
+// CHECK-NEXT: if(p4==1) cx var0[1], var0[2];
+// CHECK-NEXT: rx(2*p1) var0[2];

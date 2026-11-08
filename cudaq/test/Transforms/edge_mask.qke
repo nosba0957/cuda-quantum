@@ -106,6 +106,25 @@ module attributes {cudaq.variational_parameters = array<f64: 0.1, 0.2>} {
 
 // -----
 
+// A fixed-angle ZZ is not a cost layer: unchanged.
+
+// CHECK-LABEL: func.func @__nvqpp__mlirgen__fixed(
+// CHECK-NOT: cudaq.condition_parameter
+module {
+  func.func @__nvqpp__mlirgen__fixed() attributes {"cudaq-entrypoint", "cudaq-kernel"} {
+    %t = arith.constant 5.000000e-01 : f64
+    %q = quake.alloca !quake.veq<2>
+    %q0 = quake.extract_ref %q[0] : (!quake.veq<2>) -> !quake.ref
+    %q1 = quake.extract_ref %q[1] : (!quake.veq<2>) -> !quake.ref
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    quake.rz (%t) %q1 : (f64, !quake.ref) -> ()
+    quake.x [%q0] %q1 : (!quake.ref, !quake.ref) -> ()
+    return
+  }
+}
+
+// -----
+
 // No ZZ at all: no mask is added.
 
 // CHECK-NOT: cudaq.variational_parameters
